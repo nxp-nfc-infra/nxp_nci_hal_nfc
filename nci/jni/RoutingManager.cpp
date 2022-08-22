@@ -340,6 +340,9 @@ bool RoutingManager::addAidRouting(const uint8_t* aid, uint8_t aidLen,
   DLOG_IF(INFO, nfc_debug_enabled) << fn << ": enter";
   uint8_t powerState = 0x01;
   if (!mSecureNfcEnabled) {
+    /*masking lower 8 bits as power states will be available only in that
+     * region*/
+    power &= 0xFF;
     if (power == 0x00) {
       powerState = (route != 0x00) ? mOffHostAidRoutingPowerState : 0x11;
     } else {

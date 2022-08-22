@@ -242,12 +242,14 @@ public class AidRoutingManager {
 
         synchronized (mLock) {
             if (routeForAid.equals(mRouteForAid) && !force) {
-                if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
-                return false;
+              NfcService.getInstance().addT4TNfceeAid();
+              if (DBG) Log.d(TAG, "Routing table unchanged, not updating");
+              return false;
             }
 
             // Otherwise, update internal structures and commit new routing
             clearNfcRoutingTableLocked();
+            NfcService.getInstance().addT4TNfceeAid();
             mRouteForAid = routeForAid;
             mAidRoutingTable = aidRoutingTable;
 
@@ -416,13 +418,9 @@ public class AidRoutingManager {
                 int route = aidEntry.getValue().route;
                 int aidType = aidEntry.getValue().aidInfo;
                 String aid = aidEntry.getKey();
-                int power = aidEntry.getValue().power;
-                if (DBG) {
-                    Log.d(TAG, "commit aid:" + aid + ",route:" + route
-                        + ",aidtype:" + aidType + ", power state:" + power);
-                }
+                if (DBG) Log.d (TAG, "commit aid:"+aid+"route:"+route+"aidtype:"+aidType);
 
-                NfcService.getInstance().routeAids(aid, route, aidType, power);
+                NfcService.getInstance().routeAids(aid, route, aidType,0x01);
             }
         }
 
