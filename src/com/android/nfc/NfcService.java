@@ -14,6 +14,26 @@
  * limitations under the License.
  */
 
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP.
+ *
+ *  Copyright 2022 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 package com.android.nfc;
 
 import android.app.ActivityManager;
@@ -36,6 +56,9 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.res.Resources.NotFoundException;
+import android.hardware.emvco.IEmvcoClientCallback;
+import android.hardware.emvco.INxpEmvco;
+import android.hardware.emvco.INxpEmvcoProfileDiscovery;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.net.Uri;
@@ -87,11 +110,6 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.widget.Toast;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
-
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.ArrayUtils;
 import com.android.nfc.DeviceHost.DeviceHostListener;
@@ -103,15 +121,22 @@ import com.android.nfc.DeviceHost.TagEndpoint;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.handover.HandoverDataParser;
+import com.nxp.emvco.EmvcoEvent;
+import com.nxp.emvco.EmvcoStatus;
+import com.nxp.emvco.IEMVCoHalClientCallback;
+import com.nxp.emvco.INxpNfcDiscoveryProfile;
 import com.nxp.nfc.INxpNfcAdapter;
 import com.nxp.nfc.NfcConstants;
-
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -178,8 +203,15 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_PREFERRED_PAYMENT_CHANGED = 18;
     static final int MSG_TOAST_DEBOUNCE_EVENT = 19;
     static final int MSG_DELAY_POLLING = 20;
-	static final int MSG_READ_T4TNFCEE = 67;
-	static final int MSG_WRITE_T4TNFCEE = 68;
+    static final int MSG_READ_T4TNFCEE = 21;
+    static final int MSG_WRITE_T4TNFCEE = 22;
+    static final int MSG_SET_EMVCO_MODE = 23;
+    static final int MSG_EMVCO_TRANSACTION_EVENT = 24;
+
+    static final int NFC_FORUM_MODE = 0x00;
+    static final int EMVCO_MODE = 0x01;
+    static final int UNKNOWN_MODE = 0x02;
+    static int mNfcCurrentDiscoveryState = NFC_FORUM_MODE;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -251,8 +283,10 @@ public class NfcService implements DeviceHostListener {
     // Timeout to re-apply routing if a tag was present and we postponed it
     private static final int APPLY_ROUTING_RETRY_TIMEOUT_MS = 5000;
 
-    private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
-            VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
+    private static final VibrationAttributes
+        HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
+            VibrationAttributes.createForUsage(
+                VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
 
     private final UserManager mUserManager;
 
@@ -342,6 +376,7 @@ public class NfcService implements DeviceHostListener {
     NfcAdapterService mNfcAdapter;
     NfcDtaService mNfcDtaService;
     NxpNfcAdapterService mNxpNfcAdapter;
+    NxpNfcDiscoveryProfile mNxpNfcDiscoveryProfile;
     RoutingTableParser mRoutingTableParser;
     boolean mIsDebugBuild;
     boolean mIsHceCapable;
@@ -387,6 +422,38 @@ public class NfcService implements DeviceHostListener {
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
     private Object mT4tNfcEeObj = new Object();
     private Bundle mT4tNfceeReturnBundle = new Bundle();
+    private static IEMVCoHalClientCallback mIEMVCoHalClientCallback;
+    private INxpEmvco mINxpEmvco;
+    private INxpEmvcoProfileDiscovery mINxpEmvcoProfileDiscovery;
+    private IEmvcoClientCallback.Stub mEmvcoHalCallback =
+        new IEmvcoClientCallback.Stub() {
+          @Override
+          public void sendData(byte[] data) {
+            Log.i(TAG, "sendData");
+          }
+          @Override
+          public void sendEvent(int event, int status) {
+            Log.i(TAG, "sendEvent:" + event);
+            Bundle cbData = new Bundle();
+            cbData.putInt("event", event);
+            cbData.putInt("status", status);
+            try {
+              sendMessage(NfcService.MSG_EMVCO_TRANSACTION_EVENT, cbData);
+            } catch (Exception e) {
+              e.printStackTrace();
+            }
+          }
+          @Override
+          public int getInterfaceVersion() {
+            return this.VERSION;
+          }
+
+          @Override
+          public String getInterfaceHash() {
+            return this.HASH;
+          }
+        };
+    private Bundle mEMVcoStatus = new Bundle();
     public static NfcService getInstance() {
         return sService;
     }
@@ -500,6 +567,7 @@ public class NfcService implements DeviceHostListener {
         mRoutingTableParser = new RoutingTableParser();
         Log.i(TAG, "Starting NFC service");
         mNxpNfcAdapter = new NxpNfcAdapterService();
+        mNxpNfcDiscoveryProfile = new NxpNfcDiscoveryProfile();
 
         sService = this;
 
@@ -508,10 +576,14 @@ public class NfcService implements DeviceHostListener {
         mDeviceHost = new NativeNfcManager(mContext, this);
 
         try {
-            Object[] objargs = new Object[] {mContext};
-            mNfcExtnsClass = Class.forName("com.android.nfc.NfcExtnsService");
-            Constructor mNfcConstr = mNfcExtnsClass.getDeclaredConstructor(Context.class);
-            mNfcExtnsObj   = mNfcConstr.newInstance(objargs);
+          mINxpEmvco = getEmvcoServiceInterface();
+          mINxpEmvcoProfileDiscovery =
+              mINxpEmvco.getEmvcoProfileDiscoveryInterface();
+          Object[] objargs = new Object[] {mContext};
+          mNfcExtnsClass = Class.forName("com.android.nfc.NfcExtnsService");
+          Constructor mNfcConstr =
+              mNfcExtnsClass.getDeclaredConstructor(Context.class);
+          mNfcExtnsObj = mNfcConstr.newInstance(objargs);
         } catch(ClassNotFoundException | IllegalAccessException e) {
             Log.d(TAG, "NfcExtnsService not found");
         } catch (InstantiationException e) {
@@ -520,6 +592,8 @@ public class NfcService implements DeviceHostListener {
             Log.e(TAG, " NoSuchMethodException");
         }  catch (InvocationTargetException e) {
             Log.e(TAG, " InvocationTargetException");
+        } catch (RemoteException e) {
+          Log.e(TAG, "Failed to get EMVCo service " + e);
         }
 
         mNfcUnlockManager = NfcUnlockManager.getInstance();
@@ -760,6 +834,18 @@ public class NfcService implements DeviceHostListener {
         }
     }
 
+    /** get handle to EMVCo HAL service interface */
+    private INxpEmvco getEmvcoServiceInterface() {
+      /* get a handle to EMVCo service */
+      IBinder b =
+          ServiceManager.getService("android.hardware.emvco.INxpEmvco/default");
+      if (b == null) {
+        Log.i(TAG, "Not able to get EMVCo HAL service");
+        return null;
+      }
+      return INxpEmvco.Stub.asInterface(b);
+    }
+
     /**
      * Manages tasks that involve turning on/off the NFC controller.
      * <p/>
@@ -875,6 +961,7 @@ public class NfcService implements DeviceHostListener {
                         if (!mDeviceHost.initialize()) {
                             Log.w(TAG, "Error enabling NFC");
                             updateState(NfcAdapter.STATE_OFF);
+                            mNfcCurrentDiscoveryState = UNKNOWN_MODE;
                             return false;
                         }
                     } else if (mAlwaysOnState == NfcAdapter.STATE_ON
@@ -883,6 +970,7 @@ public class NfcService implements DeviceHostListener {
                     } else {
                         Log.e(TAG, "Unexptected bad state " + mAlwaysOnState);
                         updateState(NfcAdapter.STATE_OFF);
+                        mNfcCurrentDiscoveryState = UNKNOWN_MODE;
                         return false;
                     }
                 } finally {
@@ -908,6 +996,7 @@ public class NfcService implements DeviceHostListener {
                     mP2pLinkManager.enableDisable(mIsNdefPushEnabled, true);
                 }
                 updateState(NfcAdapter.STATE_ON);
+                mNfcCurrentDiscoveryState = NFC_FORUM_MODE;
 
                 onPreferredPaymentChanged(NfcAdapter.PREFERRED_PAYMENT_LOADED);
             }
@@ -1007,6 +1096,7 @@ public class NfcService implements DeviceHostListener {
             synchronized (NfcService.this) {
                 mCurrentDiscoveryParameters = NfcDiscoveryParameters.getNfcOffParameters();
                 updateState(NfcAdapter.STATE_OFF);
+                mNfcCurrentDiscoveryState = UNKNOWN_MODE;
             }
 
             releaseSoundPool();
@@ -1087,6 +1177,12 @@ public class NfcService implements DeviceHostListener {
                 intent.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
                 intent.putExtra(NfcAdapter.EXTRA_ADAPTER_STATE, mState);
                 mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT);
+                Log.e(TAG, "Sending NFC state to EMVCo");
+                try {
+                  mINxpEmvco.handleNfcStateChanged(newState);
+                } catch (RemoteException e) {
+                  Log.e(TAG, "Failed to register EMVCo event listener");
+                }
             }
         }
 
@@ -1294,6 +1390,19 @@ public class NfcService implements DeviceHostListener {
             } else {
                 return null;
             }
+        }
+
+        /**
+         * An interface for nxp nfc discovery profile
+         */
+        @Override
+        public IBinder
+        getNxpNfcDiscoveryProfileAdapterVendorInterface(String vendor) {
+          if (vendor.equalsIgnoreCase("nxp_nfc_discovery")) {
+            return (IBinder)mNxpNfcDiscoveryProfile;
+          } else {
+            return null;
+          }
         }
 
         @Override
@@ -1815,6 +1924,47 @@ public class NfcService implements DeviceHostListener {
           return readData;
         }
 
+    }
+
+    final class NxpNfcDiscoveryProfile extends INxpNfcDiscoveryProfile.Stub {
+
+      @Override
+      public void doSetEMVCoMode(int tech, boolean isStartEMVCo) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        Bundle techMask = new Bundle();
+        techMask.putInt("techMask", tech);
+        techMask.putBoolean("isStartEMVCo", isStartEMVCo);
+        try {
+          // sendMessage(NfcService.MSG_SET_EMVCO_MODE, techMask);
+          try {
+            mINxpEmvcoProfileDiscovery.doSetEMVCoMode((byte)tech, isStartEMVCo);
+          } catch (RemoteException e) {
+            Log.i(TAG, "Failed to call doSetEMVCoMode");
+          }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+      }
+
+      @Override
+      public int doGetCurrentDiscoveryMode() {
+        return mNfcCurrentDiscoveryState;
+      }
+
+      @Override
+      public void
+      doRegisterEMVCoEventListener(IEMVCoHalClientCallback emvcoCallback) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        synchronized (NfcService.this) {
+          mIEMVCoHalClientCallback = emvcoCallback;
+          try {
+            mINxpEmvcoProfileDiscovery.doRegisterEMVCoEventListener(
+                mEmvcoHalCallback);
+          } catch (RemoteException e) {
+            Log.e(TAG, "Failed to register EMVCo event listener");
+          }
+        }
+      }
     }
 
     final class ReaderModeDeathRecipient implements IBinder.DeathRecipient {
@@ -3009,6 +3159,38 @@ public class NfcService implements DeviceHostListener {
                     }
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
+                case MSG_SET_EMVCO_MODE: {
+                  Bundle technology = (Bundle)msg.obj;
+                  int tech = technology.getInt("techMask");
+                  boolean isStartEMVCo = technology.getBoolean("isStartEMVCo");
+                  if (DBG)
+                    Log.d(TAG, "MSG_SET_EMVCO_MODE isStartEMVCo:" +
+                                   isStartEMVCo + "tech:" + tech);
+                  try {
+                    mINxpEmvcoProfileDiscovery.doSetEMVCoMode((byte)tech,
+                                                              isStartEMVCo);
+                  } catch (RemoteException e) {
+                    Log.i(TAG, "Failed to call doSetEMVCoMode");
+                  }
+                  break;
+                }
+                case MSG_EMVCO_TRANSACTION_EVENT: {
+                  Bundle emvco_cb_data = (Bundle)msg.obj;
+                  int emvco_event = emvco_cb_data.getInt("event");
+                  int emvco_status = emvco_cb_data.getInt("status");
+                  /* Change the Nfc discovery state only if status success */
+                  if (emvco_status == 0x00) {
+                    mNfcCurrentDiscoveryState = EMVCO_MODE;
+                  }
+                  try {
+                    mIEMVCoHalClientCallback.sendEvent(
+                        EmvcoEvent.valueOf(emvco_event),
+                        EmvcoStatus.valueOf(emvco_status));
+                  } catch (RemoteException e) {
+                    Log.e(TAG, "Error in mEmvcoHalCallback.sendEvent() " + e);
+                  }
+                  break;
+                }
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;
