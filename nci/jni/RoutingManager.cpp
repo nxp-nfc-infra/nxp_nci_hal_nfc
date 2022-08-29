@@ -128,7 +128,10 @@ RoutingManager::RoutingManager()
 RoutingManager::~RoutingManager() {}
 
 bool RoutingManager::initialize(nfc_jni_native_data* native) {
-  static const char fn[] = "RoutingManager::initialize()";
+  //static const char fn[] = "RoutingManager::initialize()";
+  (void)native;
+  return true;
+#if 0
   mNativeData = native;
   mRxDataBuffer.clear();
 
@@ -170,6 +173,7 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
   updateDefaultProtocolRoute();
 
   return true;
+#endif
 }
 
 RoutingManager& RoutingManager::getInstance() {

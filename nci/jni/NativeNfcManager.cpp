@@ -1344,8 +1344,9 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     if (sPollingEnabled) {
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: Enable p2pListening", __func__);
-
+/*
       if (enable_p2p && !sP2pEnabled) {
+
         sP2pEnabled = true;
         PeerToPeer::getInstance().enableP2pListening(true);
         NFA_ResumeP2p();
@@ -1354,7 +1355,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
         PeerToPeer::getInstance().enableP2pListening(false);
         NFA_PauseP2p();
       }
-
+*/
       if (reader_mode && !sReaderModeEnabled) {
         sReaderModeEnabled = true;
         NFA_DisableListening();
@@ -1395,8 +1396,8 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
 
   // Check listen configuration
   if (enable_host_routing) {
-    RoutingManager::getInstance().enableRoutingToHost();
-    RoutingManager::getInstance().commitRouting();
+  //  RoutingManager::getInstance().enableRoutingToHost();
+  //  RoutingManager::getInstance().commitRouting();
   } else {
     RoutingManager::getInstance().disableRoutingToHost();
     RoutingManager::getInstance().commitRouting();
@@ -1956,7 +1957,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     discovry_param =
         NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_ENABLE_MASK;
   }
-
+#if 0
   SyncEventGuard guard(gNfaSetConfigEvent);
   status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
                          NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
@@ -1967,7 +1968,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
                                __FUNCTION__);
     return;
   }
-
+#endif
   // skip remaining SetScreenState tasks when trying to silent recover NFCC
   if (recovery_option && sIsRecovering) {
     prevScreenState = state;
@@ -2415,7 +2416,7 @@ bool nfcManager_isNfcActive() { return sIsNfaEnabled; }
 **
 *******************************************************************************/
 void startStopPolling(bool isStartPolling) {
-  tNFA_STATUS status = NFA_STATUS_FAILED;
+ // tNFA_STATUS status = NFA_STATUS_FAILED;
   uint8_t discovry_param = 0;
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter; isStart=%u", __func__, isStartPolling);
@@ -2429,6 +2430,7 @@ void startStopPolling(bool isStartPolling) {
       discovry_param =
           NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_DISABLE_MASK;
     }
+#if 0
     status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
                            NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
     if (status == NFA_STATUS_OK) {
@@ -2437,6 +2439,7 @@ void startStopPolling(bool isStartPolling) {
       LOG(ERROR) << StringPrintf("%s: Failed to update CON_DISCOVER_PARAM",
                                  __FUNCTION__);
     }
+#endif
   } else {
     startRfDiscovery(false);
     if (isStartPolling)
