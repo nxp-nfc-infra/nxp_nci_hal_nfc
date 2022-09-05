@@ -13,25 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-/******************************************************************************
- *
- *  The original Work has been changed by NXP Semiconductors.
- *
- *  Copyright (C) 2020 NXP Semiconductors
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *  http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
- ******************************************************************************/
 #ifdef ESE_NFC_SYNCHRONIZATION
 #include <linux/ese-nfc-sync.h>
 #endif
@@ -113,20 +94,6 @@ void EXTNS_Close(void) {
   gphNxpExtns_Context.Extns_status = EXTNS_STATUS_CLOSE;
   phNxpExtns_MfcModuleDeInit();
   return;
-}
-
-/*******************************************************************************
-**
-** Function         EXTNS_GetStatus
-**
-** Description      This function Gets the Status of the Extns.
-**
-** Returns          None
-**
-*******************************************************************************/
-
-phNxpExtns_Status EXTNS_GetStatus(void) {
-  return gphNxpExtns_Context.Extns_status;
 }
 
 /*******************************************************************************

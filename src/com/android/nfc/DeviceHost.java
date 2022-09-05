@@ -214,8 +214,6 @@ public interface DeviceHost {
 
     public int getLfT3tMax();
 
-    public int getT4TNfceePowerState();
-
     public LlcpConnectionlessSocket createLlcpConnectionlessSocket(int nSap, String sn)
             throws LlcpException;
 
@@ -274,16 +272,6 @@ public interface DeviceHost {
     public boolean setNfcSecure(boolean enable);
 
     public String getNfaStorageDir();
-
-    public int doWriteT4tData(byte[] fileId, byte[] data, int length);
-
-    public byte[] doReadT4tData(byte[] fileId);
-
-    public boolean doLockT4tData(boolean lock);
-
-    public boolean isLockedT4tData();
-
-    public boolean doClearNdefT4tData();
 
     /**
     * Get the committed listen mode routing configuration

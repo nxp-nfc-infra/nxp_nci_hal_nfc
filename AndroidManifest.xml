@@ -164,9 +164,5 @@
 
         <service android:name=".handover.PeripheralHandoverService"
         />
-
-        <uses-library android:name="com.nxp.nfc"
-            android:required="true"
-        />
     </application>
 </manifest>
