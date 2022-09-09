@@ -47,6 +47,8 @@ class RoutingManager {
   bool setNfcSecure(bool enable);
   void updateRoutingTable();
   void eeSetPwrAndLinkCtrl(uint8_t config);
+  static const int PWR_SWTCH_OFF_MASK = 0x02;
+  static const int PWR_BATT_OFF_MASK = 0x04;
 
  private:
   RoutingManager();

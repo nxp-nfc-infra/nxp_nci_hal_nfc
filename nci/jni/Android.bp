@@ -10,8 +10,9 @@ cc_library_shared {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
-
+        "-DNXP_EXTNS=TRUE",
         "-DNXP_UICC_ENABLE",
+        "-DNFC_AGC_DEBUG_FEATURE=TRUE",
     ],
 
     srcs: ["**/*.cpp"],
@@ -40,6 +41,7 @@ cc_library_shared {
         "libnfc-nci",
         "libchrome",
         "libbase",
+        "vendor.nxp.nxpnfc@2.0",
     ],
 
     static_libs: ["libxml2"],
