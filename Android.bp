@@ -32,7 +32,7 @@ android_app {
     static_libs: [
         "androidx.appcompat_appcompat",
         "com.google.android.material_material",
-	"android.hardware.emvco-V1-java",
+        "android.hardware.emvco-V1-java",
     ],
     optimize: {
         enabled: false,
