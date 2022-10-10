@@ -212,7 +212,7 @@ public class NfcService implements DeviceHostListener {
     static final int NFC_FORUM_MODE = 0x00;
     static final int EMVCO_MODE = 0x01;
     static final int UNKNOWN_MODE = 0x02;
-    static int mNfcCurrentDiscoveryState = NFC_FORUM_MODE;
+    private int mNfcCurrentDiscoveryState = NFC_FORUM_MODE;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -423,7 +423,7 @@ public class NfcService implements DeviceHostListener {
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
     private Object mT4tNfcEeObj = new Object();
     private Bundle mT4tNfceeReturnBundle = new Bundle();
-    private static IEMVCoHalClientCallback mIEMVCoHalClientCallback;
+    private IEMVCoHalClientCallback mIEMVCoHalClientCallback;
     private INxpEmvco mINxpEmvco;
     private INxpEmvcoProfileDiscovery mINxpEmvcoProfileDiscovery;
     private INfcStateChangeCallback.Stub mNfcStateChangeCallback =
