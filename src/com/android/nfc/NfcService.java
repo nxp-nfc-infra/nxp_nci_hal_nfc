@@ -1329,7 +1329,13 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean enable() throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-
+            if (Binder.getCallingUid() == Process.SHELL_UID &&
+                EMVCO_MODE == mNfcCurrentDiscoveryState) {
+              Log.e(
+                  TAG,
+                  "Not allowed to enable NFC through adb shell when EMVCo mode is ON. Use EMVCOModeSwitch application to enable NFC when EMVCo mode is ON");
+              return false;
+            }
             saveNfcOnSetting(true);
 
             new EnableDisableTask().execute(TASK_ENABLE);
@@ -1340,7 +1346,13 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-
+            if (Binder.getCallingUid() == Process.SHELL_UID &&
+                EMVCO_MODE == mNfcCurrentDiscoveryState) {
+              Log.e(
+                  TAG,
+                  "Not allowed to disable NFC through adb shell when EMVCo mode is ON. Use EMVCOModeSwitch application to disable NFC when EMVCo mode is ON");
+              return false;
+            }
             if (saveState) {
                 saveNfcOnSetting(false);
             }
