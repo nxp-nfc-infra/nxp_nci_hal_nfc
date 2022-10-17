@@ -19,9 +19,6 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/queue.h>
-#if (NXP_EXTNS == TRUE)
-#include "Nxp_Features.h"
-#endif
 
 /* Discovery modes -- keep in sync with NFCManager.DISCOVERY_MODE_* */
 #define DISCOVERY_MODE_TAG_READER 0
@@ -149,5 +146,4 @@ int register_com_android_nfc_NativeP2pDevice(JNIEnv* e);
 int register_com_android_nfc_NativeLlcpConnectionlessSocket(JNIEnv* e);
 int register_com_android_nfc_NativeLlcpServiceSocket(JNIEnv* e);
 int register_com_android_nfc_NativeLlcpSocket(JNIEnv* e);
-int register_com_android_nfc_NativeT4tNfcee(JNIEnv *e);
 }  // namespace android
