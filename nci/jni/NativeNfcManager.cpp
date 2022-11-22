@@ -1389,6 +1389,8 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
       }
 */
       if (reader_mode && !sReaderModeEnabled) {
+#if (NXP_EXTNS != TRUE)
+        // TODO : Currently FW  is not supporting Listening mode. we will enable this later.
         sReaderModeEnabled = true;
         NFA_DisableListening();
 
@@ -1396,6 +1398,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
         nfcManager_configNfccConfigControl(false);
 
         NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+#endif
       } else if (!reader_mode && sReaderModeEnabled) {
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
@@ -1427,6 +1430,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   }
 
   // Check listen configuration
+#if (NXP_EXTNS != TRUE)
   if (enable_host_routing) {
   //  RoutingManager::getInstance().enableRoutingToHost();
   //  RoutingManager::getInstance().commitRouting();
@@ -1434,6 +1438,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     RoutingManager::getInstance().disableRoutingToHost();
     RoutingManager::getInstance().commitRouting();
   }
+#endif
   // Actually start discovery.
   startRfDiscovery(true);
   sDiscoveryEnabled = true;
