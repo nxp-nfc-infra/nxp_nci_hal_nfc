@@ -126,7 +126,7 @@ import com.android.nfc.handover.HandoverDataParser;
 import com.nxp.emvco.EmvcoEvent;
 import com.nxp.emvco.EmvcoStatus;
 import com.nxp.emvco.IEMVCoHalClientCallback;
-import com.nxp.emvco.INxpNfcDiscoveryProfile;
+import com.nxp.emvco.IProfileDiscovery;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -369,7 +369,7 @@ public class NfcService implements DeviceHostListener {
     TagService mNfcTagService;
     NfcAdapterService mNfcAdapter;
     NfcDtaService mNfcDtaService;
-    NxpNfcDiscoveryProfile mNxpNfcDiscoveryProfile;
+    ProfileDiscovery mProfileDiscovery;
     RoutingTableParser mRoutingTableParser;
     boolean mIsDebugBuild;
     boolean mIsHceCapable;
@@ -456,7 +456,8 @@ public class NfcService implements DeviceHostListener {
             } catch (Exception e) {
               e.printStackTrace();
             }*/
-            if (status == 0x00) {
+            if (EmvcoEvent.valueOf(event) ==
+                EmvcoEvent.EMVCO_POLLING_STARTED_EVT) {
               mNfcCurrentDiscoveryState = EMVCO_MODE;
             }
             try {
@@ -592,7 +593,7 @@ public class NfcService implements DeviceHostListener {
         mNfcAdapter = new NfcAdapterService();
         mRoutingTableParser = new RoutingTableParser();
         Log.i(TAG, "Starting NFC service");
-        mNxpNfcDiscoveryProfile = new NxpNfcDiscoveryProfile();
+        mProfileDiscovery = new ProfileDiscovery();
 
         sService = this;
 
@@ -1426,9 +1427,9 @@ public class NfcService implements DeviceHostListener {
          */
         @Override
         public IBinder
-        getNxpNfcDiscoveryProfileAdapterVendorInterface(String vendor) {
+        getProfileDiscoveryAdapterVendorInterface(String vendor) {
           if (vendor.equalsIgnoreCase("nxp_nfc_discovery")) {
-            return (IBinder)mNxpNfcDiscoveryProfile;
+            return (IBinder)mProfileDiscovery;
           } else {
             return null;
           }
@@ -1909,7 +1910,7 @@ public class NfcService implements DeviceHostListener {
         }
     }
 
-    final class NxpNfcDiscoveryProfile extends INxpNfcDiscoveryProfile.Stub {
+    final class ProfileDiscovery extends IProfileDiscovery.Stub {
 
       @Override
       public void setEMVCoMode(int tech, boolean isStartEMVCo) {
