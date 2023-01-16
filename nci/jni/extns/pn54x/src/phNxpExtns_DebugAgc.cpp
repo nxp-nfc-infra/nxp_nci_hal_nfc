@@ -80,7 +80,6 @@ extern phNxpExtns_Status EXTNS_GetStatus(void);
 void EXTNS_DebugAgcCfg(uint8_t rfState)
 {
     unsigned long enableAgcDebug = 0;
-    int retvalue = 0xFF;
     enableAgcDebug = NfcConfig::getUnsigned(NAME_NXP_AGC_DEBUG_ENABLE, 0x00);
     enableDebugAgc.debugAgcEnable = (bool) enableAgcDebug;
     DLOG_IF(INFO, nfc_debug_enabled)
@@ -101,7 +100,7 @@ void EXTNS_DebugAgcCfg(uint8_t rfState)
             pthread_attr_t attr;
             pthread_attr_init(&attr);
             pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-            retvalue = pthread_create(&agcThread, &attr, enableAgcThread, NULL);
+            (void)pthread_create(&agcThread, &attr, enableAgcThread, NULL);
             pthread_attr_destroy(&attr);
         }
     }

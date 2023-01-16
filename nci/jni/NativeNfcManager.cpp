@@ -2453,30 +2453,11 @@ bool nfcManager_isNfcActive() { return sIsNfaEnabled; }
 **
 *******************************************************************************/
 void startStopPolling(bool isStartPolling) {
- // tNFA_STATUS status = NFA_STATUS_FAILED;
-  uint8_t discovry_param = 0;
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: enter; isStart=%u", __func__, isStartPolling);
 
   if (NFC_GetNCIVersion() >= NCI_VERSION_2_0) {
-    SyncEventGuard guard(gNfaSetConfigEvent);
-    if (isStartPolling) {
-      discovry_param =
-          NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_ENABLE_MASK;
-    } else {
-      discovry_param =
-          NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_DISABLE_MASK;
-    }
-#if 0
-    status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
-                           NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
-    if (status == NFA_STATUS_OK) {
-      gNfaSetConfigEvent.wait();
-    } else {
-      LOG(ERROR) << StringPrintf("%s: Failed to update CON_DISCOVER_PARAM",
-                                 __FUNCTION__);
-    }
-#endif
+    return;
   } else {
     startRfDiscovery(false);
     if (isStartPolling)
