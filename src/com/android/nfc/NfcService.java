@@ -18,7 +18,7 @@
  *
  *  The original Work has been changed by NXP.
  *
- *  Copyright 2022,2023 NXP
+ *  Copyright 2022-2023 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -197,6 +197,7 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_PREFERRED_PAYMENT_CHANGED = 18;
     static final int MSG_TOAST_DEBOUNCE_EVENT = 19;
     static final int MSG_DELAY_POLLING = 20;
+    static final int MSG_NFC_HAL_DIED = 21;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -391,6 +392,7 @@ public class NfcService implements DeviceHostListener {
     private static boolean sToast_debounce = false;
     private static int sToast_debounce_time_ms = 3000;
     public  static boolean sIsDtaMode = false;
+    private static boolean isNFCBinderDied = false;
 
     private IVrManager vrManager;
     boolean mIsVrModeEnabled;
@@ -416,7 +418,13 @@ public class NfcService implements DeviceHostListener {
                         Log.d(TAG, "NFC is on already. Sending NFC state to EMVCo");
                         mProfileDiscovery.onNfcStateChange(mState);
                     } else {
+                      if (isNFCBinderDied) {
+                        Log.d(
+                            TAG,
+                            "Enable NFC request received during deinitialize, so Ignoring. After Nfc abort, Nfc will be ON");
+                      } else {
                         new EnableDisableTask().execute(TASK_ENABLE);
+                      }
                     }
               } else {
                     if (mState == NfcAdapter.STATE_OFF) {
@@ -522,6 +530,11 @@ public class NfcService implements DeviceHostListener {
         mIsRecovering = true;
         new EnableDisableTask().execute(TASK_DISABLE);
         new EnableDisableTask().execute(TASK_ENABLE);
+    }
+
+    @Override
+    public void onNfcHalBinderDied() {
+      sendMessage(NfcService.MSG_NFC_HAL_DIED, null);
     }
 
     final class ReaderModeParams {
@@ -868,8 +881,11 @@ public class NfcService implements DeviceHostListener {
                     if (mPrefs.getBoolean(PREF_NFC_ON, NFC_ON_DEFAULT)) {
                         Log.d(TAG, "NFC is on. Doing normal stuff. currentProfileMode:"
                                 + mProfileDiscovery.getCurrentDiscoveryMode());
-                        if(DiscoveryMode.EMVCO != mProfileDiscovery.getCurrentDiscoveryMode()) {
-                           initialized = enableInternal();
+                        if (DiscoveryMode.EMVCO ==
+                            mProfileDiscovery.getCurrentDiscoveryMode()) {
+                          mProfileDiscovery.setEMVCoMode(0, false);
+                        } else {
+                          initialized = enableInternal();
                         }
                     } else {
                         Log.d(TAG, "NFC is off.  Checking firmware version");
@@ -2971,6 +2987,16 @@ public class NfcService implements DeviceHostListener {
                     }
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
+                case MSG_NFC_HAL_DIED:
+                  synchronized (NfcService.this) {
+                    Log.e(TAG, "NFC HAL Died. turning off EMVCo");
+                    isNFCBinderDied = true;
+                    if (DiscoveryMode.EMVCO ==
+                        mProfileDiscovery.getCurrentDiscoveryMode()) {
+                      mProfileDiscovery.setEMVCoMode(0, false);
+                    }
+                  }
+                  break;
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;

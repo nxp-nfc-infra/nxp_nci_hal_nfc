@@ -123,6 +123,9 @@ jmethodID gCachedNfcManagerNotifyRfFieldActivated;
 jmethodID gCachedNfcManagerNotifyRfFieldDeactivated;
 jmethodID gCachedNfcManagerNotifyEeUpdated;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
+#if (NXP_EXTNS == TRUE)
+jmethodID gCachedNfcManagerNotifyNfcHalBinderDied;
+#endif
 const char* gNativeP2pDeviceClassName =
     "com/android/nfc/dhimpl/NativeP2pDevice";
 const char* gNativeLlcpServiceSocketClassName =
@@ -754,6 +757,11 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   gCachedNfcManagerNotifyHwErrorReported =
       e->GetMethodID(cls.get(), "notifyHwErrorReported", "()V");
 
+#if (NXP_EXTNS == TRUE)
+  gCachedNfcManagerNotifyNfcHalBinderDied =
+      e->GetMethodID(cls.get(), "notifyNfcHalBinderDied", "()V");
+#endif
+
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
     LOG(ERROR) << StringPrintf("%s: fail cache NativeNfcTag", __func__);
@@ -971,6 +979,19 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
       SyncEventGuard guard(sNfaSetPowerSubState);
       sNfaSetPowerSubState.notifyOne();
     } break;
+#if (NXP_EXTNS == TRUE)
+    case NFA_DM_NFC_HAL_BINDER_DIED_EVT: {
+      struct nfc_jni_native_data *nat = getNative(NULL, NULL);
+      JNIEnv *e = NULL;
+      ScopedAttach attach(nat->vm, &e);
+      if (e == NULL) {
+        LOG(ERROR) << StringPrintf("jni env is null");
+        return;
+      }
+      e->CallVoidMethod(nat->manager,
+                        android::gCachedNfcManagerNotifyNfcHalBinderDied);
+    } break;
+#endif
     default:
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: unhandled event", __func__);
