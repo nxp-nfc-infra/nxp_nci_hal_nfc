@@ -62,4 +62,7 @@ extern const char* gNativeLlcpConnectionlessSocketClassName;
 extern const char* gNativeLlcpSocketClassName;
 extern const char* gNativeNfcTagClassName;
 extern const char* gNativeNfcManagerClassName;
+#if (NXP_EXTNS == TRUE)
+extern jmethodID gCachedNfcManagerNotifyTagAbortListeners;
+#endif
 }  // namespace android
