@@ -671,6 +671,22 @@ tTagStatus NfcTagExtns::performTagDeactivation() {
                                  __func__, status);
       ret = TAG_STATUS_FAILED;
     }
+  } else {
+/*    if (NFA_DM_RF_FIELD_ON) {
+      NfcTag::getInstance().resetActivationState();
+      DLOG_IF(INFO, android::nfc_debug_enabled)
+          << StringPrintf("%s: card emulation on priotiy", __func__);
+      ret = TAG_STATUS_LOST;
+    } else {*/
+      DLOG_IF(INFO, android::nfc_debug_enabled)
+          << StringPrintf("%s: deactivate to sleep", __func__);
+      if (NFA_STATUS_OK !=
+          (status = NFA_Deactivate(TRUE))) {  // deactivate to sleep state
+        LOG(ERROR) << StringPrintf("%s: deactivate failed, status = %d",
+                                   __func__, status);
+        ret = TAG_STATUS_FAILED;
+      //}
+    }
   }
 
   if ((ret == TAG_STATUS_STANDARD) &&
