@@ -2461,7 +2461,11 @@ void doStartupConfig() {
   std::vector<uint8_t> polling_frequency;
   if (NfcConfig::hasKey(NAME_POLL_FREQUENCY))
     polling_frequency = NfcConfig::getBytes(NAME_POLL_FREQUENCY);
+#if (NXP_EXTNS == TRUE)
+  if (polling_frequency.size() == 9) {
+#else
   if (polling_frequency.size() == 8) {
+#endif
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: polling frequency", __func__);
     memset(&nfa_dm_disc_freq_cfg, 0, sizeof(nfa_dm_disc_freq_cfg));
@@ -2473,6 +2477,9 @@ void doStartupConfig() {
     nfa_dm_disc_freq_cfg.pk = polling_frequency[5];
     nfa_dm_disc_freq_cfg.paa = polling_frequency[6];
     nfa_dm_disc_freq_cfg.pfa = polling_frequency[7];
+#if (NXP_EXTNS == TRUE)
+    nfa_dm_disc_freq_cfg.vas = polling_frequency[8];
+#endif
     p_nfa_dm_rf_disc_freq_cfg = &nfa_dm_disc_freq_cfg;
   }
 
