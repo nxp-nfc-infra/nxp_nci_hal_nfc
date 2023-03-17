@@ -392,7 +392,7 @@ public class NfcService implements DeviceHostListener {
     private static boolean sToast_debounce = false;
     private static int sToast_debounce_time_ms = 3000;
     public  static boolean sIsDtaMode = false;
-    private static boolean isNFCBinderDied = false;
+    private static boolean sIsNFCBinderDied = false;
 
     private IVrManager vrManager;
     boolean mIsVrModeEnabled;
@@ -418,7 +418,7 @@ public class NfcService implements DeviceHostListener {
                         Log.d(TAG, "NFC is on already. Sending NFC state to EMVCo");
                         mProfileDiscovery.onNfcStateChange(mState);
                     } else {
-                      if (isNFCBinderDied) {
+                      if (sIsNFCBinderDied) {
                         Log.d(
                             TAG,
                             "Enable NFC request received during deinitialize, so Ignoring. After Nfc abort, Nfc will be ON");
@@ -1250,12 +1250,9 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean enable() throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-            if (Binder.getCallingUid() == Process.SHELL_UID &&
-                DiscoveryMode.EMVCO == mProfileDiscovery.getCurrentDiscoveryMode()) {
-              Log.e(
-                  TAG,
-                  "Not allowed to enable NFC through adb shell when EMVCo mode is ON. Use EMVCOModeSwitch application to enable NFC when EMVCo mode is ON");
-              return false;
+            if (DiscoveryMode.EMVCO ==
+                mProfileDiscovery.getCurrentDiscoveryMode()) {
+              mProfileDiscovery.setEMVCoMode(0, false);
             }
             saveNfcOnSetting(true);
 
@@ -1267,13 +1264,6 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean disable(boolean saveState) throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-            if (Binder.getCallingUid() == Process.SHELL_UID &&
-                DiscoveryMode.EMVCO == mProfileDiscovery.getCurrentDiscoveryMode()) {
-              Log.e(
-                  TAG,
-                  "Not allowed to disable NFC through adb shell when EMVCo mode is ON. Use EMVCOModeSwitch application to disable NFC when EMVCo mode is ON");
-              return false;
-            }
             if (saveState) {
                 saveNfcOnSetting(false);
             }
@@ -2988,14 +2978,12 @@ public class NfcService implements DeviceHostListener {
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
                 case MSG_NFC_HAL_DIED:
-                  synchronized (NfcService.this) {
                     Log.e(TAG, "NFC HAL Died. turning off EMVCo");
-                    isNFCBinderDied = true;
+                    sIsNFCBinderDied = true;
                     if (DiscoveryMode.EMVCO ==
                         mProfileDiscovery.getCurrentDiscoveryMode()) {
                       mProfileDiscovery.setEMVCoMode(0, false);
                     }
-                  }
                   break;
                 default:
                     Log.e(TAG, "Unknown message received");
