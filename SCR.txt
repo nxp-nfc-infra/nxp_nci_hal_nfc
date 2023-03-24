@@ -1,0 +1,49 @@
+NXP Software Content Register
+Outgoing License: LA_OPT_NXP_Software_License v33 Jan 2022
+License File:     LA_OPT_NXP_Software_License.pdf
+​
+--------------------------------------------
+Outgoing License:          Apache Version 2.0
+License Files:             COPYING
+Package Category:          NFC Middleware
+Type of content:           Source
+Description and comments:  NCI based NFC stack
+Release Location:          
+Origin:                    The Android Open Source Project (Apache-2.0) - https://source.android.com/
+                           NXP (Apache-2.0)
+--------------------------------------------
+Outgoing License:          Apache Version 2.0
+License Files:             COPYING
+Package Category:          NFC Middleware
+Type of content:           Source
+Description and comments:  JNI NCI NFC
+Release Location:          
+Origin:                    The Android Open Source Project (Apache-2.0) - https://source.android.com/
+                           NXP (Apache-2.0)
+--------------------------------------------
+Outgoing License:          Apache Version 2.0
+License Files:             COPYING
+Package Category:          NFC SE Middleware
+Type of content:           Source
+Description and comments:  Hardware abstraction layer for NXP specific controllers
+Release Location:          
+Origin:                    The Android Open Source Project (Apache-2.0) - https://source.android.com/
+                           The Android Open Source Project (MIT) - https://source.android.com/
+                           NXP (Apache-2.0)
+--------------------------------------------
+Outgoing License:          Apache Version 2.0
+License Files:             COPYING
+Package Category:          NFC Middleware and Test Application
+Type of content:           Source
+Description and comments:  Device Test Application (DTA) used for NFC Forum testing
+Release Location:          https://github.com/NXPNFCProject/NXPAndroidDTA
+Origin:                    NXP (Apache-2.0)
+--------------------------------------------
+Outgoing License:          LA_OPT_NXP_Software_License
+License File:              COPYING
+Package Category:          NFC Firmware
+Type of content:           Binariy
+Description and comments:  NFC controller firmware
+Release Location:          
+Origin:                    NXP (proprietary)
+--------------------------------------------
