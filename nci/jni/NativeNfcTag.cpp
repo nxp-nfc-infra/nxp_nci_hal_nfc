@@ -720,22 +720,24 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         (NFC_GetNCIVersion() >= NCI_VERSION_2_0)) {
       {
         SyncEventGuard g3(sReconnectEvent);
-#if (NXP_EXTNS == TRUE)
-        if (nfcTagExtns.processNonStdTagOperation(
-                TAG_API_REQUEST::TAG_RESELECT_API,
-                TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
-            NfcTagExtns::TAG_STATUS_SUCCESS) {
-          LOG(ERROR) << StringPrintf("%s: TAG_HALT_PICC_OPERATION failed",
-                                     __func__);
+
+        if (sCurrentActivatedProtocl == NFC_PROTOCOL_UNKNOWN) {
+          if (nfcTagExtns.processNonStdTagOperation(
+                  TAG_API_REQUEST::TAG_RESELECT_API,
+                  TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
+              NfcTagExtns::TAG_STATUS_SUCCESS) {
+            LOG(ERROR) << StringPrintf("%s: TAG_HALT_PICC_OPERATION failed",
+                                       __func__);
+          }
+        } else {
+          if (sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) {
+            status =
+                NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
+          } else if (sCurrentActivatedProtocl == NFA_PROTOCOL_ISO_DEP) {
+            status =
+                NFA_SendRawFrame(RW_DESELECT_REQ, sizeof(RW_DESELECT_REQ), 0);
+          }
         }
-#else
-        if (sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) {
-          status = NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
-        } else if (sCurrentActivatedProtocl == NFA_PROTOCOL_ISO_DEP) {
-          status = NFA_SendRawFrame(RW_DESELECT_REQ,
-                                    sizeof(RW_DESELECT_REQ), 0);
-        }
-#endif
         sReconnectEvent.wait(4);
         if (status != NFA_STATUS_OK) {
           LOG(ERROR) << StringPrintf("%s: send error=%d", __func__, status);
