@@ -210,7 +210,15 @@ void nativeNfcTag_doReadCompleted(tNFA_STATUS status) {
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: status=0x%X; is reading=%u", __func__, status,
                       sIsReadingNdefMessage);
-
+#if (NXP_EXTNS == TRUE)
+  if (status == NFA_STATUS_TIMEOUT) {
+  tNFA_STATUS nfaStat = NFA_STATUS_OK;
+    nfaStat = NFA_Deactivate(FALSE);
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << StringPrintf("%s: deactivate failed; error=0x%X", __func__,
+                                 nfaStat);
+  }
+#endif
   if (sIsReadingNdefMessage == false)
     return;  // not reading NDEF message right now, so just return
 
