@@ -1345,17 +1345,6 @@ public class NfcService implements DeviceHostListener {
                 return mIsSecureNfcEnabled;
             }
         }
-    /**
-         * An interface for nxp extensions
-         */
-        @Override
-        public IBinder getNfcAdapterVendorInterface(String vendor) {
-            if(vendor.equalsIgnoreCase("nxp")) {
-                return (IBinder) mNxpNfcAdapter;
-            } else {
-                return null;
-            }
-        }
 
         @Override
         public boolean setNfcSecure(boolean enable) {
