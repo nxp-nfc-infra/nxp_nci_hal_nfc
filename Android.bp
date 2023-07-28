@@ -19,13 +19,15 @@ android_app {
         ":statslog-Nfc-java-gen",
     ],
     uses_libs: [
-        "com.nxp.emvco"
+        "com.nxp.emvco",
+        "com.nxp.nfc",
     ],
     platform_apis: true,
     certificate: "platform",
     jni_libs: ["libnfc_nci_jni"],
     libs: [
-        "com.nxp.emvco"
+        "com.nxp.emvco",
+        "com.nxp.nfc",
     ],
     static_libs: [
         "androidx.appcompat_appcompat",

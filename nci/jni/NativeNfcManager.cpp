@@ -65,6 +65,8 @@
 #include "rw_api.h"
 #if(NXP_EXTNS == TRUE)
 #include "NfcTagExtns.h"
+#include "nfa_nfcee_int.h"
+#include "NativeT4tNfcee.h"
 #endif
 
 using android::base::StringPrintf;
@@ -73,6 +75,8 @@ extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
 extern bool gIsSelectingRfInterface;
+const char* gNativeT4tNfceeClassName =
+    "com/android/nfc/dhimpl/NativeT4tNfceeManager";
 extern void nativeNfcTag_doTransceiveStatus(tNFA_STATUS status, uint8_t* buf,
                                             uint32_t buflen);
 extern void nativeNfcTag_notifyRfTimeout();
@@ -706,6 +710,15 @@ static void nfaConnectionCallback(uint8_t connEvent,
       PeerToPeer::getInstance().connectionEventHandler(connEvent, eventData);
       break;
 
+    #if (NXP_EXTNS == TRUE)
+    case NFA_T4TNFCEE_EVT:
+    case NFA_T4TNFCEE_READ_CPLT_EVT:
+    case NFA_T4TNFCEE_WRITE_CPLT_EVT:
+    case NFA_T4TNFCEE_CLEAR_CPLT_EVT:
+      t4tNfcEe.eventHandler(connEvent, eventData);
+      break;
+    #endif
+
     default:
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: unknown event ????", __func__);
@@ -1074,6 +1087,13 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
   ScopedByteArrayRO bytes(e, aid);
   buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   bufLen = bytes.size();
+  #if (NXP_EXTNS == TRUE)
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 1", __func__);
+    NativeT4tNfcee::getInstance().checkAndUpdateT4TAid(buf, (uint8_t*)&bufLen);
+
+    RoutingManager::getInstance().removeAidRouting(buf, bufLen);
+    DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 2", __func__);
+  #endif
 
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
                                                      aidInfo, power);
@@ -2192,6 +2212,27 @@ static jint nfcManager_getAidTableSize(JNIEnv*, jobject) {
 
 /*******************************************************************************
 **
+** Function:        nfcManager_getT4TNfceePowerState
+**
+** Description:     Get the T4T Nfcee power state supported.
+**                  e: JVM environment.
+**                  o: Java object.
+**                  mode: Not used.
+**
+** Returns:         None
+**
+*******************************************************************************/
+static jint nfcManager_getT4TNfceePowerState(JNIEnv* e, jobject o) {
+  RoutingManager& routingManager = RoutingManager::getInstance();
+  int defaultPowerState = ~(routingManager.PWR_SWTCH_OFF_MASK |
+          routingManager.PWR_BATT_OFF_MASK);
+
+  return NfcConfig::getUnsigned(NAME_DEFAULT_T4TNFCEE_AID_POWER_STATE,
+          defaultPowerState);
+}
+
+/*******************************************************************************
+**
 ** Function:        nfcManager_doStartStopPolling
 **
 ** Description:     Start or stop NFC RF polling
@@ -2386,6 +2427,8 @@ static JNINativeMethod gMethods[] = {
 
     {"getMaxRoutingTableSize", "()I",
      (void*)nfcManager_doGetMaxRoutingTableSize},
+    {"getT4TNfceePowerState", "()I",
+            (void*) nfcManager_getT4TNfceePowerState},
 };
 
 /*******************************************************************************

@@ -108,6 +108,10 @@ import android.util.EventLog;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.widget.Toast;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.util.ArrayUtils;
 import com.android.nfc.DeviceHost.DeviceHostListener;
@@ -121,6 +125,8 @@ import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.handover.HandoverDataParser;
 import com.nxp.emvco.INfcStateChangeRequestCallback;
 import com.nxp.emvco.ProfileDiscovery;
+import com.nxp.nfc.INxpNfcAdapter;
+import com.nxp.nfc.NfcConstants;
 import java.io.File;
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -176,6 +182,7 @@ public class NfcService implements DeviceHostListener {
     static final String NATIVE_LOG_FILE_NAME = "native_crash_logs";
     static final String NATIVE_LOG_FILE_PATH = "/data/misc/nfc/logs";
     static final int NATIVE_CRASH_FILE_SIZE = 1024 * 1024;
+    static final String T4T_NFCEE_AID = "D2760000850101";
     static final int MSG_NDEF_TAG = 0;
     static final int MSG_LLCP_LINK_ACTIVATION = 1;
     static final int MSG_LLCP_LINK_DEACTIVATED = 2;
@@ -196,12 +203,15 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_TRANSACTION_EVENT = 17;
     static final int MSG_PREFERRED_PAYMENT_CHANGED = 18;
     static final int MSG_TOAST_DEBOUNCE_EVENT = 19;
+    static final int MSG_READ_T4TNFCEE = 67;
+    static final int MSG_WRITE_T4TNFCEE = 68;
     static final int MSG_DELAY_POLLING = 20;
     static final int MSG_NFC_HAL_DIED = 21;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
-
+    private int ROUTE_ID_T4T_NFCEE = 0x10;
+    private int AID_MATCHING_EXACT_ONLY = 0x02;
     // Update stats every 4 hours
     static final long STATS_UPDATE_INTERVAL_MS = 4 * 60 * 60 * 1000;
     static final long MAX_POLLING_PAUSE_TIMEOUT = 40000;
@@ -359,6 +369,7 @@ public class NfcService implements DeviceHostListener {
     TagService mNfcTagService;
     NfcAdapterService mNfcAdapter;
     NfcDtaService mNfcDtaService;
+    NxpNfcAdapterService mNxpNfcAdapter;
     RoutingTableParser mRoutingTableParser;
     boolean mIsDebugBuild;
     boolean mIsHceCapable;
@@ -396,6 +407,10 @@ public class NfcService implements DeviceHostListener {
 
     private IVrManager vrManager;
     boolean mIsVrModeEnabled;
+
+    public static final int T4TNFCEE_STATUS_FAILED = -1;
+    private Object mT4tNfcEeObj = new Object();
+    private Bundle mT4tNfceeReturnBundle = new Bundle();
 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
@@ -551,6 +566,7 @@ public class NfcService implements DeviceHostListener {
         mNfcAdapter = new NfcAdapterService();
         mRoutingTableParser = new RoutingTableParser();
         Log.i(TAG, "Starting NFC service");
+        mNxpNfcAdapter = new NxpNfcAdapterService();
         mProfileDiscovery = ProfileDiscovery.getInstance(mContext);
         mProfileDiscovery.registerNFCStateChangeCallback(mNfcStateChangeCallback);
         sService = this;
@@ -1345,7 +1361,17 @@ public class NfcService implements DeviceHostListener {
                 return mIsSecureNfcEnabled;
             }
         }
-
+        /**
+         * An interface for nxp extensions
+        */
+        @Override
+        public IBinder getNfcAdapterVendorInterface(String vendor) {
+            if(vendor.equalsIgnoreCase("nxp")) {
+                return (IBinder) mNxpNfcAdapter;
+            } else {
+                return null;
+            }
+        }
         @Override
         public boolean setNfcSecure(boolean enable) {
             NfcPermissions.enforceAdminPermissions(mContext);
@@ -1819,6 +1845,51 @@ public class NfcService implements DeviceHostListener {
 
             mAlwaysOnListeners.remove(listener);
         }
+    }
+
+    final class NxpNfcAdapterService extends INxpNfcAdapter.Stub {
+        @Override
+        public int doWriteT4tData(byte[] fileId, byte[] data, int length) {
+          NfcPermissions.enforceUserPermissions(mContext);
+          Bundle writeBundle = new Bundle();
+          writeBundle.putByteArray("fileId", fileId);
+          writeBundle.putByteArray("writeData", data);
+          writeBundle.putInt("length", length);
+          try {
+            sendMessage(NfcService.MSG_WRITE_T4TNFCEE, writeBundle);
+            synchronized (mT4tNfcEeObj) {
+              mT4tNfcEeObj.wait(1000);
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+          /*return T4TNFCEE_STATUS_FAILED(-1) if readData not found.
+         This can happen in case of mT4tNfcEeObj timeout*/
+          int status = mT4tNfceeReturnBundle.getInt("writeStatus", T4TNFCEE_STATUS_FAILED);
+          mT4tNfceeReturnBundle.clear();
+          return status;
+        }
+
+        @Override
+        public byte[] doReadT4tData(byte[] fileId) {
+          NfcPermissions.enforceUserPermissions(mContext);
+          Bundle readBundle = new Bundle();
+          readBundle.putByteArray("fileId", fileId);
+          try {
+            sendMessage(NfcService.MSG_READ_T4TNFCEE, readBundle);
+            synchronized (mT4tNfcEeObj) {
+              mT4tNfcEeObj.wait(1000);
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+          /*getByteArray returns null if readData not found.
+          This can happen in case of mT4tNfcEeObj timeout*/
+          byte[] readData = mT4tNfceeReturnBundle.getByteArray("readData");
+          mT4tNfceeReturnBundle.clear();
+          return readData;
+        }
+
     }
 
     final class ReaderModeDeathRecipient implements IBinder.DeathRecipient {
@@ -2540,6 +2611,19 @@ public class NfcService implements DeviceHostListener {
         return mDeviceHost.createLlcpServerSocket(sap, sn, miu, rw, linearBufferLength);
     }
 
+    /**
+     * get default T4TNfcee power state supported
+     */
+    public int GetT4TNfceePowerState() {
+        int powerState = mDeviceHost.getT4TNfceePowerState();
+        if (mIsSecureNfcEnabled) {
+          /* Secure nfc on,Setting power state screen on unlocked */
+          powerState=0x01;
+        }
+        if (DBG) Log.d(TAG, "T4TNfceePowerState : " + powerState);
+        return powerState;
+    }
+
     public int getAidRoutingTableSize ()
     {
         int aidTableSize = 0x00;
@@ -2967,6 +3051,29 @@ public class NfcService implements DeviceHostListener {
                     sToast_debounce = false;
                     break;
 
+                case MSG_WRITE_T4TNFCEE: {
+                    Bundle writeBundle = (Bundle) msg.obj;
+                    byte[] fileId = writeBundle.getByteArray("fileId");
+                    byte[] writeData = writeBundle.getByteArray("writeData");
+                    int length = writeBundle.getInt("length");
+                    int status = mDeviceHost.doWriteT4tData(fileId, writeData, length);
+                    mT4tNfceeReturnBundle.putInt("writeStatus", status);
+                    synchronized (mT4tNfcEeObj) {
+                        mT4tNfcEeObj.notify();
+                    }
+                        break;
+                    }
+
+                case MSG_READ_T4TNFCEE: {
+                    Bundle readBundle = (Bundle) msg.obj;
+                    byte[] fileId = readBundle.getByteArray("fileId");
+                    byte[] readData = mDeviceHost.doReadT4tData(fileId);
+                    mT4tNfceeReturnBundle.putByteArray("readData", readData);
+                    synchronized (mT4tNfcEeObj) {
+                        mT4tNfcEeObj.notify();
+                    }
+                    break;
+                    }
                 case MSG_DELAY_POLLING:
                     synchronized (NfcService.this) {
                         if (!mPollingDelayed) {
@@ -3616,6 +3723,12 @@ public class NfcService implements DeviceHostListener {
         }
     }
 
+    public void addT4TNfceeAid() {
+      Log.i(TAG, "Add T4T Nfcee AID");
+      routeAids(T4T_NFCEE_AID, ROUTE_ID_T4T_NFCEE,
+              AID_MATCHING_EXACT_ONLY,
+              GetT4TNfceePowerState());
+    }
     /**
      * Dump debugging information as a NfcServiceDumpProto
      *
