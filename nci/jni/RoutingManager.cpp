@@ -128,52 +128,54 @@ RoutingManager::RoutingManager()
 RoutingManager::~RoutingManager() {}
 
 bool RoutingManager::initialize(nfc_jni_native_data* native) {
-  //static const char fn[] = "RoutingManager::initialize()";
-  (void)native;
-  return true;
-#if 0
-  mNativeData = native;
-  mRxDataBuffer.clear();
-
-  {
-    SyncEventGuard guard(mEeRegisterEvent);
-    DLOG_IF(INFO, nfc_debug_enabled) << fn << ": try ee register";
-    tNFA_STATUS nfaStat = NFA_EeRegister(nfaEeCallback);
-    if (nfaStat != NFA_STATUS_OK) {
-      LOG(ERROR) << StringPrintf("%s: fail ee register; error=0x%X", fn,
-                                 nfaStat);
-      return false;
-    }
-    mEeRegisterEvent.wait();
+  static const char fn[] = "RoutingManager::initialize()";
+  if(nfcFL.chipType != pn7160) {
+    (void)native;
+    return true;
   }
+  else {
+    mNativeData = native;
+    mRxDataBuffer.clear();
 
-  if ((mDefaultOffHostRoute != 0) || (mDefaultFelicaRoute != 0)) {
-    // Wait for EE info if needed
-    SyncEventGuard guard(mEeInfoEvent);
-    if (!mReceivedEeInfo) {
-      LOG(INFO) << fn << "Waiting for EE info";
-      mEeInfoEvent.wait();
+    {
+      SyncEventGuard guard(mEeRegisterEvent);
+      DLOG_IF(INFO, nfc_debug_enabled) << fn << ": try ee register";
+      tNFA_STATUS nfaStat = NFA_EeRegister(nfaEeCallback);
+      if (nfaStat != NFA_STATUS_OK) {
+        LOG(ERROR) << StringPrintf("%s: fail ee register; error=0x%X", fn,
+                                   nfaStat);
+        return false;
+      }
+      mEeRegisterEvent.wait();
     }
+
+    if ((mDefaultOffHostRoute != 0) || (mDefaultFelicaRoute != 0)) {
+      // Wait for EE info if needed
+      SyncEventGuard guard(mEeInfoEvent);
+      if (!mReceivedEeInfo) {
+        LOG(INFO) << fn << "Waiting for EE info";
+        mEeInfoEvent.wait();
+      }
+    }
+    mSeTechMask = updateEeTechRouteSetting();
+
+    // Set the host-routing Tech
+    tNFA_STATUS nfaStat = NFA_CeSetIsoDepListenTech(
+        mHostListenTechMask & (NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_B));
+
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << StringPrintf("Failed to configure CE IsoDep technologies");
+
+    // Register a wild-card for AIDs routed to the host
+    nfaStat = NFA_CeRegisterAidOnDH(NULL, 0, stackCallback);
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << fn << "Failed to register wildcard AID for DH";
+
+    updateDefaultRoute();
+    updateDefaultProtocolRoute();
+
+    return true;
   }
-  mSeTechMask = updateEeTechRouteSetting();
-
-  // Set the host-routing Tech
-  tNFA_STATUS nfaStat = NFA_CeSetIsoDepListenTech(
-      mHostListenTechMask & (NFA_TECHNOLOGY_MASK_A | NFA_TECHNOLOGY_MASK_B));
-
-  if (nfaStat != NFA_STATUS_OK)
-    LOG(ERROR) << StringPrintf("Failed to configure CE IsoDep technologies");
-
-  // Register a wild-card for AIDs routed to the host
-  nfaStat = NFA_CeRegisterAidOnDH(NULL, 0, stackCallback);
-  if (nfaStat != NFA_STATUS_OK)
-    LOG(ERROR) << fn << "Failed to register wildcard AID for DH";
-
-  updateDefaultRoute();
-  updateDefaultProtocolRoute();
-
-  return true;
-#endif
 }
 
 RoutingManager& RoutingManager::getInstance() {

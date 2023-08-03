@@ -67,6 +67,7 @@
 #include "NfcTagExtns.h"
 #include "nfa_nfcee_int.h"
 #include "NativeT4tNfcee.h"
+#include "Nxp_Features.h"
 #endif
 
 using android::base::StringPrintf;
@@ -1232,6 +1233,7 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
+  tNFC_chipType chipType;
   tNFA_MW_VERSION mwVer;
 #endif
   initializeGlobalDebugEnabledFlag();
@@ -1246,6 +1248,9 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
     goto TheEnd;
   }
 #if (NXP_EXTNS == TRUE)
+    chipType = NFA_GetChipVersion();
+    DLOG_IF(INFO, true) << StringPrintf(
+        "%s:  NFA_GetChipVersion : chipType = %u", __func__,chipType);
     mwVer=  NFA_GetMwVersion();
     DLOG_IF(INFO, true) << StringPrintf(
         "%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x", __func__,
@@ -1501,15 +1506,15 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
   }
 
   // Check listen configuration
-#if (NXP_EXTNS != TRUE)
   if (enable_host_routing) {
-  //  RoutingManager::getInstance().enableRoutingToHost();
-  //  RoutingManager::getInstance().commitRouting();
+    if(nfcFL.chipType == pn7160) {
+      RoutingManager::getInstance().enableRoutingToHost();
+      RoutingManager::getInstance().commitRouting();
+    }
   } else {
     RoutingManager::getInstance().disableRoutingToHost();
     RoutingManager::getInstance().commitRouting();
   }
-#endif
   // Actually start discovery.
   startRfDiscovery(true);
   sDiscoveryEnabled = true;
