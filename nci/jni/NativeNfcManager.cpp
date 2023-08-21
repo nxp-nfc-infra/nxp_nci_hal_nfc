@@ -716,7 +716,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
     case NFA_T4TNFCEE_READ_CPLT_EVT:
     case NFA_T4TNFCEE_WRITE_CPLT_EVT:
     case NFA_T4TNFCEE_CLEAR_CPLT_EVT:
+    if (nfcFL.chipType == pn7160) {
       t4tNfcEe.eventHandler(connEvent, eventData);
+    }
       break;
     #endif
 
@@ -1089,11 +1091,13 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
   buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   bufLen = bytes.size();
   #if (NXP_EXTNS == TRUE)
+  if (nfcFL.chipType == pn7160) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 1", __func__);
     NativeT4tNfcee::getInstance().checkAndUpdateT4TAid(buf, (uint8_t*)&bufLen);
 
     RoutingManager::getInstance().removeAidRouting(buf, bufLen);
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 2", __func__);
+  }
   #endif
 
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
