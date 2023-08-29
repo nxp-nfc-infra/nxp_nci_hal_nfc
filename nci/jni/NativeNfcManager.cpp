@@ -1508,16 +1508,15 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     // No technologies configured, stop polling
     stopPolling_rfDiscoveryDisabled();
   }
-
-  // Check listen configuration
-  if (enable_host_routing) {
-    if(nfcFL.chipType == pn7160) {
+  if (nfcFL.chipType == pn7160) {
+    // Check listen configuration
+    if (enable_host_routing) {
       RoutingManager::getInstance().enableRoutingToHost();
       RoutingManager::getInstance().commitRouting();
+    } else {
+      RoutingManager::getInstance().disableRoutingToHost();
+      RoutingManager::getInstance().commitRouting();
     }
-  } else {
-    RoutingManager::getInstance().disableRoutingToHost();
-    RoutingManager::getInstance().commitRouting();
   }
   // Actually start discovery.
   startRfDiscovery(true);
