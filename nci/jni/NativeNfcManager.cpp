@@ -1455,38 +1455,39 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
     if (sPollingEnabled) {
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: Enable p2pListening", __func__);
-/*
-      if (enable_p2p && !sP2pEnabled) {
+      if (nfcFL.chipType == pn7160) {
 
-        sP2pEnabled = true;
-        PeerToPeer::getInstance().enableP2pListening(true);
-        NFA_ResumeP2p();
-      } else if (!enable_p2p && sP2pEnabled) {
-        sP2pEnabled = false;
-        PeerToPeer::getInstance().enableP2pListening(false);
-        NFA_PauseP2p();
+        if (enable_p2p && !sP2pEnabled) {
+
+          sP2pEnabled = true;
+          PeerToPeer::getInstance().enableP2pListening(true);
+          NFA_ResumeP2p();
+        } else if (!enable_p2p && sP2pEnabled) {
+          sP2pEnabled = false;
+          PeerToPeer::getInstance().enableP2pListening(false);
+          NFA_PauseP2p();
+        }
       }
-*/
       if (reader_mode && !sReaderModeEnabled) {
-#if (NXP_EXTNS != TRUE)
-        // TODO : Currently FW  is not supporting Listening mode. we will enable this later.
-        sReaderModeEnabled = true;
-        NFA_DisableListening();
+        if (nfcFL.chipType == pn7160) {
+          sReaderModeEnabled = true;
+          NFA_DisableListening();
 
-        // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF configuration.
-        nfcManager_configNfccConfigControl(false);
+          // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF
+          // configuration.
+          nfcManager_configNfccConfigControl(false);
 
-        NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
-#endif
+          NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+        }
       } else if (!reader_mode && sReaderModeEnabled) {
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
         NFA_EnableListening();
 
         // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF configuration.
-#if (NXP_EXTNS != TRUE)
-        nfcManager_configNfccConfigControl(true);
-#endif
+        if (nfcFL.chipType == pn7160) {
+          nfcManager_configNfccConfigControl(true);
+        }
         NFA_SetRfDiscoveryDuration(nat->discovery_duration);
       }
     }
