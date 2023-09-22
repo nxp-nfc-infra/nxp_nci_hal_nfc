@@ -1,7 +1,7 @@
 NXP Software Content Register
 --------------------------------------------
 Repository: Infra_Common_MW_Android13
-Outgoing License: LA_OPT_NXP_Software_License v46 Jun 2023 - Standard License, license in Section 2.2 applies
+Outgoing License: LA_OPT_NXP_Software_License v49 September 2023 - Standard License, license in Section 2.2 applies
 License File: LICENSE.pdf
 Description and Comments: PN7220/21 and PN716x NFC Android Common Middleware
 Release Location: https://github.com/NXPNFCLinux/PN7220_Android13/nfc
