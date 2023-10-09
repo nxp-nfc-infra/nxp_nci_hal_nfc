@@ -168,4 +168,5 @@ int register_com_android_nfc_NativeLlcpConnectionlessSocket(JNIEnv* e);
 int register_com_android_nfc_NativeLlcpServiceSocket(JNIEnv* e);
 int register_com_android_nfc_NativeLlcpSocket(JNIEnv* e);
 int register_com_android_nfc_NativeT4tNfcee(JNIEnv *e);
+int register_com_android_nfc_NativeNfcTda(JNIEnv *e);
 }  // namespace android

@@ -41,11 +41,10 @@ import android.nfc.ErrorCodes;
 import android.nfc.tech.Ndef;
 import android.nfc.tech.TagTechnology;
 import android.util.Log;
-
 import com.android.nfc.DeviceHost;
 import com.android.nfc.LlcpException;
 import com.android.nfc.NfcDiscoveryParameters;
-
+import com.nxp.nfc.NfcTDAInfo;
 import java.io.FileDescriptor;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -72,7 +71,7 @@ public class NativeNfcManager implements DeviceHost {
     private final DeviceHostListener mListener;
     private final Context mContext;
     private final NativeT4tNfceeManager mT4tNfceeMgr;
-
+    private final NativeNfcTdaManager mTdaMgr;
 
     private final Object mLock = new Object();
     private final HashMap<Integer, byte[]> mT3tIdentifiers = new HashMap<Integer, byte[]>();
@@ -82,6 +81,7 @@ public class NativeNfcManager implements DeviceHost {
         initializeNativeStructure();
         mContext = context;
         mT4tNfceeMgr = new NativeT4tNfceeManager();
+        mTdaMgr = new NativeNfcTdaManager();
     }
 
     public native boolean initializeNativeStructure();
@@ -473,6 +473,26 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native int getMaxRoutingTableSize();
+
+    @Override
+    public NfcTDAInfo[] discoverTDA() {
+      return mTdaMgr.discoverTDA();
+    }
+
+    @Override
+    public byte openTDA(byte tdaID, boolean standBy) {
+      return mTdaMgr.openTDA(tdaID, standBy);
+    }
+
+    @Override
+    public byte[] transceive(byte[] in_data) {
+      return mTdaMgr.transceive(in_data);
+    }
+
+    @Override
+    public byte closeTDA(byte tdaID, boolean standBy) {
+      return mTdaMgr.closeTDA(tdaID, standBy);
+    }
 
     /** Notifies Ndef Message (TODO: rename into notifyTargetDiscovered) */
     private void notifyNdefMessageListeners(NativeNfcTag tag) {
