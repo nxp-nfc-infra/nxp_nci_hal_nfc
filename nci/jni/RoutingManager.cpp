@@ -147,11 +147,6 @@ RoutingManager::~RoutingManager() {}
 
 bool RoutingManager::initialize(nfc_jni_native_data* native) {
   static const char fn[] = "RoutingManager::initialize()";
-  if(nfcFL.chipType != pn7160) {
-    (void)native;
-    return true;
-  }
-  else {
     mNativeData = native;
     mRxDataBuffer.clear();
 
@@ -193,7 +188,6 @@ bool RoutingManager::initialize(nfc_jni_native_data* native) {
     updateDefaultProtocolRoute();
 
     return true;
-  }
 }
 
 RoutingManager& RoutingManager::getInstance() {
