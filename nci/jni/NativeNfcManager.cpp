@@ -2034,9 +2034,10 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
-  if (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
-      prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
-      prevScreenState == NFA_SCREEN_STATE_ON_LOCKED) {
+  if ((nfcFL.chipType == pn7160) &&
+      (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+       prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
+       prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -2092,7 +2093,8 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
-  if (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED) {
+  if ((nfcFL.chipType == pn7160) &&
+      (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED)) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -2116,6 +2118,14 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
       (!sP2pActive) && (!sSeRfActive)) {
     // screen turns off, disconnect tag if connected
     nativeNfcTag_doDisconnect(NULL, NULL);
+    if (nfcFL.chipType == pn7220) {
+      NFA_StopRfDiscovery();
+    }
+  }
+
+  if ((nfcFL.chipType == pn7220) && (state == NFA_SCREEN_STATE_ON_UNLOCKED) &&
+      (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED)) {
+    NFA_StartRfDiscovery();
   }
 
   prevScreenState = state;
