@@ -45,6 +45,7 @@ import com.android.nfc.DeviceHost;
 import com.android.nfc.LlcpException;
 import com.android.nfc.NfcDiscoveryParameters;
 import com.nxp.nfc.NfcTDAInfo;
+import com.nxp.nfc.PowerResult;
 import java.io.FileDescriptor;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -473,6 +474,8 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native int getMaxRoutingTableSize();
+
+    @Override public native PowerResult setPowerConfig(byte[] pwrConfig);
 
     @Override
     public NfcTDAInfo[] discoverTDA() {

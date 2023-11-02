@@ -125,6 +125,7 @@ import com.nxp.nfc.INxpNfcAdapter;
 import com.nxp.nfc.INxpNfcTDA;
 import com.nxp.nfc.NfcConstants;
 import com.nxp.nfc.NfcTDAInfo;
+import com.nxp.nfc.PowerResult;
 import com.nxp.nfc.TdaResult;
 import java.io.File;
 import java.io.FileDescriptor;
@@ -209,6 +210,7 @@ public class NfcService implements DeviceHostListener {
     static final int MSG_OPEN_TDA = 23;
     static final int MSG_TRANSCEIVE_TDA = 24;
     static final int MSG_CLOSE_TDA = 25;
+    static final int MSG_SET_POWER_CONFIG = 26;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -419,6 +421,7 @@ public class NfcService implements DeviceHostListener {
     public static final int T4TNFCEE_STATUS_FAILED = -1;
     private Object mT4tNfcEeObj = new Object();
     private Bundle mT4tNfceeReturnBundle = new Bundle();
+    private Bundle mPowerResultBundle = new Bundle();
 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
@@ -1919,6 +1922,22 @@ public class NfcService implements DeviceHostListener {
           return readData;
         }
 
+        @Override
+        public PowerResult setPowerConfig(byte[] pwrConfig) {
+          NfcPermissions.enforceUserPermissions(mContext);
+          Bundle writeBundle = new Bundle();
+          writeBundle.putByteArray("pwrConfig", pwrConfig);
+          try {
+            sendMessage(NfcService.MSG_SET_POWER_CONFIG, writeBundle);
+            synchronized (mT4tNfcEeObj) { mT4tNfcEeObj.wait(1000); }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+          PowerResult powerResult =
+              mPowerResultBundle.getParcelable("powerResult");
+          mPowerResultBundle.clear();
+          return powerResult;
+        }
     }
 
     final class NxpNfcTdaProfile extends INxpNfcTDA.Stub {
@@ -3192,20 +3211,22 @@ public class NfcService implements DeviceHostListener {
                     }
                     break;
                     }
-                case MSG_DELAY_POLLING:
-                    synchronized (NfcService.this) {
+                    case MSG_DELAY_POLLING: {
+                      synchronized (NfcService.this) {
                         if (!mPollingDelayed) {
                             return;
                         }
                         mPollingDelayed = false;
                         mDeviceHost.startStopPolling(true);
-                    }
+                      }
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
+                    }
                 case MSG_TDA_DISCOVER: {
                   mTdaInfo = mDeviceHost.discoverTDA();
                   synchronized (mTdaDiscInfo) { mTdaDiscInfo.notify(); }
-                } break;
+                  break;
+                }
                 case MSG_OPEN_TDA: {
                   Bundle tdaBundle = (Bundle)msg.obj;
                   byte tdaID = tdaBundle.getByte("tdaID");
@@ -3214,7 +3235,8 @@ public class NfcService implements DeviceHostListener {
                   mOpenTdaBundle.clear();
                   mOpenTdaBundle.putByte("mCID", mCID);
                   synchronized (mOpenTdaObj) { mOpenTdaObj.notify(); }
-                } break;
+                  break;
+                }
                 case MSG_TRANSCEIVE_TDA: {
                   Bundle tdaTransBundle = (Bundle)msg.obj;
                   byte[] trans_cmd = tdaTransBundle.getByteArray("trans_cmd");
@@ -3222,7 +3244,8 @@ public class NfcService implements DeviceHostListener {
                   mTdaTransBundle.clear();
                   mTdaTransBundle.putByteArray("trans_rsp", trans_rsp);
                   synchronized (mTdaTransObj) { mTdaTransObj.notify(); }
-                } break;
+                  break;
+                }
                 case MSG_CLOSE_TDA: {
                   Bundle tdaBundle = (Bundle)msg.obj;
                   byte tdaID = tdaBundle.getByte("tdaID");
@@ -3231,15 +3254,26 @@ public class NfcService implements DeviceHostListener {
                   mCloseTdaBundle.clear();
                   mCloseTdaBundle.putByte("status", status);
                   synchronized (mCloseTdaObj) { mCloseTdaObj.notify(); }
-                } break;
-                case MSG_NFC_HAL_DIED:
-                    Log.e(TAG, "NFC HAL Died. turning off EMVCo");
-                    sIsNFCBinderDied = true;
-                    if (DiscoveryMode.EMVCO ==
-                        mProfileDiscovery.getCurrentDiscoveryMode()) {
-                      mProfileDiscovery.setEMVCoMode(0, false);
-                    }
                   break;
+                }
+                case MSG_NFC_HAL_DIED: {
+                  Log.e(TAG, "NFC HAL Died. turning off EMVCo");
+                  sIsNFCBinderDied = true;
+                  if (DiscoveryMode.EMVCO ==
+                      mProfileDiscovery.getCurrentDiscoveryMode()) {
+                    mProfileDiscovery.setEMVCoMode(0, false);
+                  }
+                  break;
+                }
+                case MSG_SET_POWER_CONFIG: {
+                  Bundle mPwrConfigBundle = (Bundle)msg.obj;
+                  byte[] pwrConfig = mPwrConfigBundle.getByteArray("pwrConfig");
+                  PowerResult powerResult =
+                      mDeviceHost.setPowerConfig(pwrConfig);
+                  mPowerResultBundle.putParcelable("powerResult", powerResult);
+                  synchronized (mT4tNfcEeObj) { mT4tNfcEeObj.notify(); }
+                  break;
+                }
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;

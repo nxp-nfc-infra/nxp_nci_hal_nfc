@@ -39,6 +39,7 @@ import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.os.Bundle;
 import com.nxp.nfc.NfcTDAInfo;
+import com.nxp.nfc.PowerResult;
 import java.io.FileDescriptor;
 import java.io.IOException;
 
@@ -333,4 +334,9 @@ public interface DeviceHost {
     * Set NFCC power state by sending NFCEE_POWER_AND_LINK_CNTRL_CMD
     */
     void setNfceePowerAndLinkCtrl(boolean enable);
+
+    /**
+     * Sets the power configuration to the controller
+     */
+    PowerResult setPowerConfig(byte[] pwrConfig);
 }

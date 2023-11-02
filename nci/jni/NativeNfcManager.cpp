@@ -137,6 +137,17 @@ jmethodID gCachedNfcManagerNotifyHwErrorReported;
 jmethodID gCachedNfcManagerNotifyTagAbortListeners;
 jmethodID gCachedNfcManagerNotifyNfcHalBinderDied;
 #endif
+
+static jclass gPowerResultClass = NULL;
+static jobject gPwrConfResObj = NULL;
+static jobject gPwrConfSuccessObj = NULL;
+static jobject gPwrConfFailedObj = NULL;
+static jmethodID gPowerResultContructor = NULL;
+static jclass gResultClass = NULL;
+static jfieldID gResultField = NULL;
+static jmethodID gValuesMethod = NULL;
+static jobjectArray gResultValues = NULL;
+
 const char* gNativeP2pDeviceClassName =
     "com/android/nfc/dhimpl/NativeP2pDevice";
 const char* gNativeLlcpServiceSocketClassName =
@@ -476,10 +487,11 @@ static void nfaConnectionCallback(uint8_t connEvent,
         if (NFC_GetNCIVersion() == NCI_VERSION_1_0) {
           // Disable RF field events in case of p2p
           uint8_t nfa_disable_rf_events[] = {0x00};
+          uint8_t tag_len = 1;
+          uint8_t tag = NCI_PARAM_ID_RF_FIELD_INFO;
           DLOG_IF(INFO, nfc_debug_enabled)
               << StringPrintf("%s: Disabling RF field events", __func__);
-          status = NFA_SetConfig(NCI_PARAM_ID_RF_FIELD_INFO,
-                                 sizeof(nfa_disable_rf_events),
+          status = NFA_SetConfig(tag_len, &tag, sizeof(nfa_disable_rf_events),
                                  &nfa_disable_rf_events[0]);
           if (status == NFA_STATUS_OK) {
             DLOG_IF(INFO, nfc_debug_enabled)
@@ -551,13 +563,14 @@ static void nfaConnectionCallback(uint8_t connEvent,
           if (NFC_GetNCIVersion() == NCI_VERSION_1_0) {
             // Disable RF field events in case of p2p
             uint8_t nfa_enable_rf_events[] = {0x01};
-
+            uint8_t tag_len = 1;
+            uint8_t tag = NCI_PARAM_ID_RF_FIELD_INFO;
             if (!sIsDisabling && sIsNfaEnabled) {
               DLOG_IF(INFO, nfc_debug_enabled)
                   << StringPrintf("%s: Enabling RF field events", __func__);
-              status = NFA_SetConfig(NCI_PARAM_ID_RF_FIELD_INFO,
-                                     sizeof(nfa_enable_rf_events),
-                                     &nfa_enable_rf_events[0]);
+              status =
+                  NFA_SetConfig(tag_len, &tag, sizeof(nfa_enable_rf_events),
+                                &nfa_enable_rf_events[0]);
               if (status == NFA_STATUS_OK) {
                 DLOG_IF(INFO, nfc_debug_enabled)
                     << StringPrintf("%s: Enabled RF field events", __func__);
@@ -1300,13 +1313,16 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 
         if (gIsDtaEnabled == true) {
           uint8_t configData = 0;
+          uint8_t tagLen = 1;
           configData = 0x01; /* Poll NFC-DEP : Highest Available Bit Rates */
-          NFA_SetConfig(NCI_PARAM_ID_BITR_NFC_DEP, sizeof(uint8_t),
-                        &configData);
+          uint8_t tag = NCI_PARAM_ID_BITR_NFC_DEP;
+          NFA_SetConfig(tagLen, &tag, sizeof(uint8_t), &configData);
           configData = 0x0B; /* Listen NFC-DEP : Waiting Time */
-          NFA_SetConfig(NFC_PMID_WT, sizeof(uint8_t), &configData);
+          tag = NFC_PMID_WT;
+          NFA_SetConfig(tagLen, &tag, sizeof(uint8_t), &configData);
           configData = 0x0F; /* Specific Parameters for NFC-DEP RF Interface */
-          NFA_SetConfig(NCI_PARAM_ID_NFC_DEP_OP, sizeof(uint8_t), &configData);
+          tag = NCI_PARAM_ID_NFC_DEP_OP;
+          NFA_SetConfig(tagLen, &tag, sizeof(uint8_t), &configData);
         }
 
         struct nfc_jni_native_data* nat = getNative(e, o);
@@ -1392,12 +1408,12 @@ static void nfcManager_configNfccConfigControl(bool flag) {
     // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF configuration.
     if (NFC_GetNCIVersion() != NCI_VERSION_1_0) {
         uint8_t nfa_set_config[] = { 0x00 };
-
+        uint8_t tag_len = 1;
+        uint8_t tag = NCI_PARAM_ID_NFCC_CONFIG_CONTROL;
         nfa_set_config[0] = (flag == true ? 1 : 0);
 
-        tNFA_STATUS status = NFA_SetConfig(NCI_PARAM_ID_NFCC_CONFIG_CONTROL,
-                                           sizeof(nfa_set_config),
-                                           &nfa_set_config[0]);
+        tNFA_STATUS status = NFA_SetConfig(
+            tag_len, &tag, sizeof(nfa_set_config), &nfa_set_config[0]);
         if (status != NFA_STATUS_OK) {
             LOG(ERROR) << __func__
             << ": Failed to configure NFCC_CONFIG_CONTROL";
@@ -2077,7 +2093,9 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
   }
 #if 0
   SyncEventGuard guard(gNfaSetConfigEvent);
-  status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
+  uint8_t tag_len = 1;
+  uint8_t tag = NCI_PARAM_ID_CON_DISCOVERY_PARAM;
+  status = NFA_SetConfig(tag_len, &tag,
                          NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
   if (status == NFA_STATUS_OK) {
     gNfaSetConfigEvent.wait();
@@ -2346,110 +2364,177 @@ static jbyteArray nfcManager_doGetRoutingTable(JNIEnv* e, jobject o) {
   return rtJavaArray;
 }
 
+/*******************************************************************************
+**
+** Function:        nfcManager_setPowerConfig
+**
+** Description:     Sets the power configuration to controller
+**
+** Parameter:       power configuration
+**
+** Returns:         Return set power configuration results.
+**                  Return "Success" when power configuration successfully
+*applied to controller
+**                  Otherwise, "False" shall be returned.
+**
+*******************************************************************************/
+jobject nfcManager_setPowerConfig(JNIEnv *env, jobject obj,
+                                  jbyteArray pwr_config) {
+  ScopedByteArrayRO bytes(env, pwr_config);
+  uint8_t *val =
+      const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(&bytes[0]));
+  size_t valLen = val[0];
+  uint8_t tagLen = 2;
+  uint8_t tag[] = {0xA1, 0xA4};
+
+  startRfDiscovery(false);
+
+  tNFA_STATUS status = NFA_SetConfig(tagLen, &tag[0], valLen, &val[1]);
+  if (status == NFA_STATUS_OK) {
+    gNfaSetConfigEvent.wait();
+    env->SetObjectField(android::gPwrConfResObj, android::gResultField,
+                        android::gPwrConfSuccessObj);
+  } else {
+    LOG(ERROR) << StringPrintf(
+        "%s: Failed to set POWER CONFIGURATION. Not able to get GKI buffer",
+        __FUNCTION__);
+  }
+
+  startRfDiscovery(true);
+
+  return android::gPwrConfResObj;
+}
+
 /*****************************************************************************
 **
 ** JNI functions for android-4.0.1_r1
 **
 *****************************************************************************/
 static JNINativeMethod gMethods[] = {
-    {"doDownload", "()Z", (void*)nfcManager_doDownload},
+    {"doDownload", "()Z", (void *)nfcManager_doDownload},
 
-    {"initializeNativeStructure", "()Z", (void*)nfcManager_initNativeStruc},
+    {"initializeNativeStructure", "()Z", (void *)nfcManager_initNativeStruc},
 
-    {"doInitialize", "()Z", (void*)nfcManager_doInitialize},
+    {"doInitialize", "()Z", (void *)nfcManager_doInitialize},
 
-    {"doDeinitialize", "()Z", (void*)nfcManager_doDeinitialize},
+    {"doDeinitialize", "()Z", (void *)nfcManager_doDeinitialize},
 
-    {"sendRawFrame", "([B)Z", (void*)nfcManager_sendRawFrame},
+    {"sendRawFrame", "([B)Z", (void *)nfcManager_sendRawFrame},
 
-    {"routeAid", "([BIII)Z", (void*)nfcManager_routeAid},
+    {"routeAid", "([BIII)Z", (void *)nfcManager_routeAid},
 
-    {"unrouteAid", "([B)Z", (void*)nfcManager_unrouteAid},
+    {"unrouteAid", "([B)Z", (void *)nfcManager_unrouteAid},
 
-    {"commitRouting", "()Z", (void*)nfcManager_commitRouting},
+    {"commitRouting", "()Z", (void *)nfcManager_commitRouting},
 
     {"doRegisterT3tIdentifier", "([B)I",
-     (void*)nfcManager_doRegisterT3tIdentifier},
+     (void *)nfcManager_doRegisterT3tIdentifier},
 
     {"doDeregisterT3tIdentifier", "(I)V",
-     (void*)nfcManager_doDeregisterT3tIdentifier},
+     (void *)nfcManager_doDeregisterT3tIdentifier},
 
-    {"getLfT3tMax", "()I", (void*)nfcManager_getLfT3tMax},
+    {"getLfT3tMax", "()I", (void *)nfcManager_getLfT3tMax},
 
-    {"doEnableDiscovery", "(IZZZZZ)V", (void*)nfcManager_enableDiscovery},
+    {"doEnableDiscovery", "(IZZZZZ)V", (void *)nfcManager_enableDiscovery},
 
-    {"doStartStopPolling", "(Z)V", (void*)nfcManager_doStartStopPolling},
+    {"doStartStopPolling", "(Z)V", (void *)nfcManager_doStartStopPolling},
 
-    {"doCheckLlcp", "()Z", (void*)nfcManager_doCheckLlcp},
+    {"doCheckLlcp", "()Z", (void *)nfcManager_doCheckLlcp},
 
-    {"doActivateLlcp", "()Z", (void*)nfcManager_doActivateLlcp},
+    {"doActivateLlcp", "()Z", (void *)nfcManager_doActivateLlcp},
 
     {"doCreateLlcpConnectionlessSocket",
      "(ILjava/lang/String;)Lcom/android/nfc/dhimpl/"
      "NativeLlcpConnectionlessSocket;",
-     (void*)nfcManager_doCreateLlcpConnectionlessSocket},
+     (void *)nfcManager_doCreateLlcpConnectionlessSocket},
 
     {"doCreateLlcpServiceSocket",
      "(ILjava/lang/String;III)Lcom/android/nfc/dhimpl/NativeLlcpServiceSocket;",
-     (void*)nfcManager_doCreateLlcpServiceSocket},
+     (void *)nfcManager_doCreateLlcpServiceSocket},
 
     {"doCreateLlcpSocket", "(IIII)Lcom/android/nfc/dhimpl/NativeLlcpSocket;",
-     (void*)nfcManager_doCreateLlcpSocket},
+     (void *)nfcManager_doCreateLlcpSocket},
 
-    {"doGetLastError", "()I", (void*)nfcManager_doGetLastError},
+    {"doGetLastError", "()I", (void *)nfcManager_doGetLastError},
 
-    {"disableDiscovery", "()V", (void*)nfcManager_disableDiscovery},
+    {"disableDiscovery", "()V", (void *)nfcManager_disableDiscovery},
 
-    {"doSetTimeout", "(II)Z", (void*)nfcManager_doSetTimeout},
+    {"doSetTimeout", "(II)Z", (void *)nfcManager_doSetTimeout},
 
-    {"doGetTimeout", "(I)I", (void*)nfcManager_doGetTimeout},
+    {"doGetTimeout", "(I)I", (void *)nfcManager_doGetTimeout},
 
-    {"doResetTimeouts", "()V", (void*)nfcManager_doResetTimeouts},
+    {"doResetTimeouts", "()V", (void *)nfcManager_doResetTimeouts},
 
-    {"doAbort", "(Ljava/lang/String;)V", (void*)nfcManager_doAbort},
+    {"doAbort", "(Ljava/lang/String;)V", (void *)nfcManager_doAbort},
 
     {"doSetP2pInitiatorModes", "(I)V",
-     (void*)nfcManager_doSetP2pInitiatorModes},
+     (void *)nfcManager_doSetP2pInitiatorModes},
 
-    {"doSetP2pTargetModes", "(I)V", (void*)nfcManager_doSetP2pTargetModes},
+    {"doSetP2pTargetModes", "(I)V", (void *)nfcManager_doSetP2pTargetModes},
 
     {"doEnableScreenOffSuspend", "()V",
-     (void*)nfcManager_doEnableScreenOffSuspend},
+     (void *)nfcManager_doEnableScreenOffSuspend},
 
-    {"doSetScreenState", "(I)V", (void*)nfcManager_doSetScreenState},
+    {"doSetScreenState", "(I)V", (void *)nfcManager_doSetScreenState},
 
     {"doDisableScreenOffSuspend", "()V",
-     (void*)nfcManager_doDisableScreenOffSuspend},
+     (void *)nfcManager_doDisableScreenOffSuspend},
 
-    {"doDump", "(Ljava/io/FileDescriptor;)V", (void*)nfcManager_doDump},
+    {"doDump", "(Ljava/io/FileDescriptor;)V", (void *)nfcManager_doDump},
 
-    {"getNciVersion", "()I", (void*)nfcManager_doGetNciVersion},
-    {"doEnableDtaMode", "()V", (void*)nfcManager_doEnableDtaMode},
-    {"doDisableDtaMode", "()V", (void*)nfcManager_doDisableDtaMode},
-    {"doFactoryReset", "()V", (void*)nfcManager_doFactoryReset},
-    {"doShutdown", "()V", (void*)nfcManager_doShutdown},
+    {"getNciVersion", "()I", (void *)nfcManager_doGetNciVersion},
+    {"doEnableDtaMode", "()V", (void *)nfcManager_doEnableDtaMode},
+    {"doDisableDtaMode", "()V", (void *)nfcManager_doDisableDtaMode},
+    {"doFactoryReset", "()V", (void *)nfcManager_doFactoryReset},
+    {"doShutdown", "()V", (void *)nfcManager_doShutdown},
 
     {"getIsoDepMaxTransceiveLength", "()I",
-     (void*)nfcManager_getIsoDepMaxTransceiveLength},
+     (void *)nfcManager_getIsoDepMaxTransceiveLength},
 
-    {"getAidTableSize", "()I", (void*)nfcManager_getAidTableSize},
+    {"getAidTableSize", "()I", (void *)nfcManager_getAidTableSize},
 
-    {"doSetNfcSecure", "(Z)Z", (void*)nfcManager_doSetNfcSecure},
+    {"doSetNfcSecure", "(Z)Z", (void *)nfcManager_doSetNfcSecure},
 
     {"getNfaStorageDir", "()Ljava/lang/String;",
-     (void*)nfcManager_doGetNfaStorageDir},
+     (void *)nfcManager_doGetNfaStorageDir},
 
     {"doSetNfceePowerAndLinkCtrl", "(Z)V",
-     (void*)nfcManager_doSetNfceePowerAndLinkCtrl},
+     (void *)nfcManager_doSetNfceePowerAndLinkCtrl},
 
-    {"getRoutingTable", "()[B", (void*)nfcManager_doGetRoutingTable},
+    {"getRoutingTable", "()[B", (void *)nfcManager_doGetRoutingTable},
 
     {"getMaxRoutingTableSize", "()I",
-     (void*)nfcManager_doGetMaxRoutingTableSize},
-    {"getT4TNfceePowerState", "()I",
-            (void*) nfcManager_getT4TNfceePowerState},
+     (void *)nfcManager_doGetMaxRoutingTableSize},
+    {"getT4TNfceePowerState", "()I", (void *)nfcManager_getT4TNfceePowerState},
+    {"setPowerConfig", "([B)Lcom/nxp/nfc/PowerResult;",
+     (void *)nfcManager_setPowerConfig},
 };
 
+void initialize_power_config_params(JNIEnv *e) {
+
+  android::gPowerResultClass = e->FindClass("com/nxp/nfc/PowerResult");
+  android::gPowerResultContructor =
+      e->GetMethodID(android::gPowerResultClass, "<init>",
+                     "(Lcom/nxp/nfc/PowerResult$Result;)V");
+  android::gResultField = e->GetFieldID(android::gPowerResultClass, "mResult",
+                                        "Lcom/nxp/nfc/PowerResult$Result;");
+  android::gResultClass = e->FindClass("com/nxp/nfc/PowerResult$Result");
+  android::gValuesMethod = e->GetStaticMethodID(
+      android::gResultClass, "values", "()[Lcom/nxp/nfc/PowerResult$Result;");
+  android::gResultValues = (jobjectArray)e->CallStaticObjectMethod(
+      android::gResultClass, android::gValuesMethod);
+
+  jobject pwrConfFailed = e->GetObjectArrayElement(android::gResultValues, 0);
+  android::gPwrConfFailedObj = e->NewGlobalRef(pwrConfFailed);
+
+  jobject pwrConfSuccess = e->GetObjectArrayElement(android::gResultValues, 1);
+  android::gPwrConfSuccessObj = e->NewGlobalRef(pwrConfSuccess);
+
+  jobject pwrRes =
+      e->NewObject(android::gPowerResultClass, android::gPowerResultContructor,
+                   android::gPwrConfFailedObj);
+  android::gPwrConfResObj = e->NewGlobalRef(pwrRes);
+}
 /*******************************************************************************
 **
 ** Function:        register_com_android_nfc_NativeNfcManager
@@ -2464,6 +2549,7 @@ int register_com_android_nfc_NativeNfcManager(JNIEnv* e) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
   PowerSwitch::getInstance().initialize(PowerSwitch::UNKNOWN_LEVEL);
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
+  initialize_power_config_params(e);
   return jniRegisterNativeMethods(e, gNativeNfcManagerClassName, gMethods,
                                   NELEM(gMethods));
 }

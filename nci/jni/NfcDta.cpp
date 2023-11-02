@@ -184,13 +184,14 @@ tNFA_STATUS NfcDta::setConfigParams(std::vector<uint8_t> configTlv) {
   uint16_t index = 0;
   uint8_t paramId = 0;
   uint8_t len = 0;
+  uint8_t tagLen = 1;
   while (index < configTlv.size()) {
     paramId = configTlv[index++];
     len = configTlv[index++];
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "%s: Param Id: %02X, Length: %02X", __func__, paramId, len);
     SyncEventGuard guard(gNfaSetConfigEvent);
-    status = NFA_SetConfig(paramId, len, &configTlv[index]);
+    status = NFA_SetConfig(tagLen, &paramId, len, &configTlv[index]);
     if (status == NFA_STATUS_OK) {
       gNfaSetConfigEvent.wait();
     } else {
