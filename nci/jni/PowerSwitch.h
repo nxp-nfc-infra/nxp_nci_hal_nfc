@@ -14,10 +14,31 @@
  * limitations under the License.
  */
 
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP
+ *
+ *  Copyright 2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 /*
  *  Adjust the controller's power states.
  */
 #pragma once
+#include "NfcJniUtil.h"
 #include "SyncEvent.h"
 #include "nfa_api.h"
 
@@ -128,6 +149,18 @@ class PowerSwitch {
 
   /*******************************************************************************
   **
+  ** Function:        initializeJNIElements
+  **
+  ** Description:     Initialize JNI elements of dynamic power configuration
+  *feature.
+  **
+  ** Returns:         Status of registration.
+  **
+  *******************************************************************************/
+  int initializeJNIElements(JNIEnv *e);
+
+  /*******************************************************************************
+  **
   ** Function:        initialize
   **
   ** Description:     Initialize member variables.
@@ -159,6 +192,25 @@ class PowerSwitch {
   **
   *******************************************************************************/
   bool setLevel(PowerLevel level);
+
+  /*******************************************************************************
+  **
+  ** Function:        setDynamicPowerConfig
+  **
+  ** Description:     Sets the power configuration to controller
+  **
+  ** Parameter:       power configuration
+  **
+  ** Returns:         Return set power configuration results.
+  **                  Return "Success" when power configuration successfully
+  **                  applied to controller.
+  **                  Returns VALUE_ALREADY_EXISTS, if given power configuration
+  **                  already exist in controller.
+  **                  Otherwise, "False" shall be returned.
+  **
+  *******************************************************************************/
+  jobject setDynamicPowerConfig(JNIEnv *env, jobject obj,
+                                jbyteArray pwr_config);
 
   /*******************************************************************************
   **
@@ -244,6 +296,23 @@ class PowerSwitch {
   SyncEvent mPowerStateEvent;
   PowerActivity mCurrActivity;
   Mutex mMutex;
+
+  jclass mPwrResultClass = NULL;
+  jobject mPwrConfResObj = NULL;
+  jobject mPwrConfSuccessObj = NULL;
+  jobject mPwrConfAlreadyExistObj = NULL;
+  jobject mPwrConfFailedObj = NULL;
+  jmethodID mPwrResultContructor = NULL;
+  jclass mResultClass = NULL;
+  jfieldID mResultField = NULL;
+  jmethodID mValuesMethod = NULL;
+  jobjectArray mResultValues = NULL;
+  tNFA_STATUS mPwrConfstatus = NFA_STATUS_FAILED;
+  SyncEvent mNfasetDynamicPowerConfigEvent;
+  SyncEvent mNfaGetConfigEvent;
+  uint16_t mCurrentConfigLen;
+  uint8_t mConfig[256];
+  static const int PWR_CONF_VAL_INDEX;
 
   /*******************************************************************************
   **

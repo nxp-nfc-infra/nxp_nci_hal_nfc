@@ -121,11 +121,11 @@ import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.handover.HandoverDataParser;
 import com.nxp.emvco.INfcStateChangeRequestCallback;
 import com.nxp.emvco.ProfileDiscovery;
+import com.nxp.nfc.DynamicPowerResult;
 import com.nxp.nfc.INxpNfcAdapter;
 import com.nxp.nfc.INxpNfcTDA;
 import com.nxp.nfc.NfcConstants;
 import com.nxp.nfc.NfcTDAInfo;
-import com.nxp.nfc.PowerResult;
 import com.nxp.nfc.TdaResult;
 import java.io.File;
 import java.io.FileDescriptor;
@@ -421,7 +421,7 @@ public class NfcService implements DeviceHostListener {
     public static final int T4TNFCEE_STATUS_FAILED = -1;
     private Object mT4tNfcEeObj = new Object();
     private Bundle mT4tNfceeReturnBundle = new Bundle();
-    private Bundle mPowerResultBundle = new Bundle();
+    private Bundle mDynamicPowerResultBundle = new Bundle();
 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
@@ -1923,7 +1923,7 @@ public class NfcService implements DeviceHostListener {
         }
 
         @Override
-        public PowerResult setPowerConfig(byte[] pwrConfig) {
+        public DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig) {
           NfcPermissions.enforceUserPermissions(mContext);
           Bundle writeBundle = new Bundle();
           writeBundle.putByteArray("pwrConfig", pwrConfig);
@@ -1933,10 +1933,10 @@ public class NfcService implements DeviceHostListener {
           } catch (Exception e) {
             e.printStackTrace();
           }
-          PowerResult powerResult =
-              mPowerResultBundle.getParcelable("powerResult");
-          mPowerResultBundle.clear();
-          return powerResult;
+          DynamicPowerResult DynamicPowerResult =
+              mDynamicPowerResultBundle.getParcelable("DynamicPowerResult");
+          mDynamicPowerResultBundle.clear();
+          return DynamicPowerResult;
         }
     }
 
@@ -3268,9 +3268,10 @@ public class NfcService implements DeviceHostListener {
                 case MSG_SET_POWER_CONFIG: {
                   Bundle mPwrConfigBundle = (Bundle)msg.obj;
                   byte[] pwrConfig = mPwrConfigBundle.getByteArray("pwrConfig");
-                  PowerResult powerResult =
-                      mDeviceHost.setPowerConfig(pwrConfig);
-                  mPowerResultBundle.putParcelable("powerResult", powerResult);
+                  DynamicPowerResult DynamicPowerResult =
+                      mDeviceHost.setDynamicPowerConfig(pwrConfig);
+                  mDynamicPowerResultBundle.putParcelable("DynamicPowerResult",
+                                                          DynamicPowerResult);
                   synchronized (mT4tNfcEeObj) { mT4tNfcEeObj.notify(); }
                   break;
                 }

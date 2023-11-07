@@ -42,8 +42,8 @@
 #include <nativehelper/JNIHelp.h>
 #include <nativehelper/ScopedLocalRef.h>
 
+#include "PowerSwitch.h"
 #include "RoutingManager.h"
-
 using android::base::StringPrintf;
 
 extern bool nfc_debug_enabled;
@@ -85,6 +85,9 @@ jint JNI_OnLoad(JavaVM* jvm, void*) {
     return JNI_ERR;
   if (android::register_com_android_nfc_NativeNfcTda(e) == -1)
     return JNI_ERR;
+  if (PowerSwitch::getInstance().initializeJNIElements(e) == -1)
+    return JNI_ERR;
+
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   return JNI_VERSION_1_6;
 }

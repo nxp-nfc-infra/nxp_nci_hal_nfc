@@ -14,6 +14,26 @@
  * limitations under the License.
  */
 
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP
+ *
+ *  Copyright 2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
+
 /*
  *  Adjust the controller's power states.
  */
@@ -23,11 +43,13 @@
 
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
+#include <nativehelper/ScopedPrimitiveArray.h>
 
 using android::base::StringPrintf;
 
 namespace android {
 void doStartupConfig();
+extern void startRfDiscovery(bool isStart);
 }
 
 extern bool gActivated;
@@ -39,6 +61,8 @@ const PowerSwitch::PowerActivity PowerSwitch::DISCOVERY = 0x01;
 const PowerSwitch::PowerActivity PowerSwitch::SE_ROUTING = 0x02;
 const PowerSwitch::PowerActivity PowerSwitch::SE_CONNECTED = 0x04;
 const PowerSwitch::PowerActivity PowerSwitch::HOST_ROUTING = 0x08;
+
+const int PowerSwitch::PWR_CONF_VAL_INDEX = 4;
 
 /*******************************************************************************
 **
@@ -116,6 +140,82 @@ void PowerSwitch::initialize(PowerLevel level) {
       break;
   }
   mMutex.unlock();
+}
+
+/*******************************************************************************
+**
+** Function:        initializeJNIElements
+**
+** Description:     Initialize JNI elements of dynamic power configuration
+*feature.
+**
+** Returns:         Status of registration.
+**
+*******************************************************************************/
+int PowerSwitch::initializeJNIElements(JNIEnv *e) {
+  mPwrResultClass = e->FindClass("com/nxp/nfc/DynamicPowerResult");
+  if (mPwrResultClass == nullptr) {
+    return -1;
+  }
+  mPwrResultContructor = e->GetMethodID(
+      mPwrResultClass, "<init>", "(Lcom/nxp/nfc/DynamicPowerResult$Result;)V");
+  if (mPwrResultContructor == nullptr) {
+    return -1;
+  }
+  mResultField = e->GetFieldID(mPwrResultClass, "mResult",
+                               "Lcom/nxp/nfc/DynamicPowerResult$Result;");
+  if (mResultField == nullptr) {
+    return -1;
+  }
+  mResultClass = e->FindClass("com/nxp/nfc/DynamicPowerResult$Result");
+  if (mResultClass == nullptr) {
+    return -1;
+  }
+  mValuesMethod = e->GetStaticMethodID(
+      mResultClass, "values", "()[Lcom/nxp/nfc/DynamicPowerResult$Result;");
+  if (mValuesMethod == nullptr) {
+    return -1;
+  }
+  mResultValues =
+      (jobjectArray)e->CallStaticObjectMethod(mResultClass, mValuesMethod);
+  if (mResultValues == nullptr) {
+    return -1;
+  }
+
+  jobject pwrConfSuccess = e->GetObjectArrayElement(mResultValues, 0);
+  if (pwrConfSuccess == nullptr) {
+    return -1;
+  }
+  mPwrConfSuccessObj = e->NewGlobalRef(pwrConfSuccess);
+  if (mPwrConfSuccessObj == nullptr) {
+    return -1;
+  }
+
+  jobject pwrConfAlreadyExistObj = e->GetObjectArrayElement(mResultValues, 1);
+  if (pwrConfAlreadyExistObj == nullptr) {
+    return -1;
+  }
+  mPwrConfAlreadyExistObj = e->NewGlobalRef(pwrConfAlreadyExistObj);
+  if (mPwrConfAlreadyExistObj == nullptr) {
+    return -1;
+  }
+
+  jobject pwrConfFailed = e->GetObjectArrayElement(mResultValues, 2);
+  if (pwrConfFailed == nullptr) {
+    return -1;
+  }
+  mPwrConfFailedObj = e->NewGlobalRef(pwrConfFailed);
+  if (mPwrConfFailedObj == nullptr) {
+    return -1;
+  }
+
+  jobject pwrRes =
+      e->NewObject(mPwrResultClass, mPwrResultContructor, mPwrConfFailedObj);
+  if (pwrRes == nullptr) {
+    return -1;
+  }
+  mPwrConfResObj = e->NewGlobalRef(pwrRes);
+  return 0;
 }
 
 /*******************************************************************************
@@ -216,6 +316,79 @@ bool PowerSwitch::setScreenOffPowerState(ScreenOffPowerState newState) {
   mMutex.unlock();
 
   return true;
+}
+
+/*******************************************************************************
+**
+** Function:        setConfig
+**
+** Description:     Sets the power configuration to controller
+**
+** Parameter:       power configuration
+**
+** Returns:         Return set power configuration results.
+**                  Return "Success" when power configuration successfully
+*applied to controller.
+**                  Returns VALUE_ALREADY_EXISTS, if given power configuration
+*already exist in controller.
+**                  Otherwise, "False" shall be returned.
+**
+*******************************************************************************/
+jobject PowerSwitch::setDynamicPowerConfig(JNIEnv *env, jobject obj,
+                                           jbyteArray pwr_config) {
+  tNFA_STATUS status = NFA_STATUS_FAILED;
+  ScopedByteArrayRO bytes(env, pwr_config);
+  uint8_t *val =
+      const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(&bytes[0]));
+  size_t valLen = val[0];
+  uint8_t value = val[1];
+  uint8_t tagLen = 2;
+  uint8_t tag[] = {0xA1, 0xA4};
+
+  SyncEventGuard guardGetConfig(mNfaGetConfigEvent);
+  status = NFA_GetConfigExtn(tagLen, 1 /* No of TAG*/, tag);
+  if (status == NFA_STATUS_OK) {
+    mNfaGetConfigEvent.wait();
+    if (mCurrentConfigLen >= PWR_CONF_VAL_INDEX ||
+        (mConfig[1] == 0xA1 && mConfig[2] == 0xA4)) {
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s: current pwr_config=%02X and requested_config=%02X", __func__,
+          mConfig[PWR_CONF_VAL_INDEX], value);
+      if (value == mConfig[PWR_CONF_VAL_INDEX]) {
+        DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+            "%s: NFCC already has requested value. not need to set again",
+            __func__);
+        env->SetObjectField(mPwrConfResObj, mResultField,
+                            mPwrConfAlreadyExistObj);
+        return mPwrConfResObj;
+      }
+    }
+  }
+
+  android::startRfDiscovery(false);
+
+  SyncEventGuard guardsetDynamicPowerConfig(mNfasetDynamicPowerConfigEvent);
+  status = NFA_SetConfigExtn(tagLen, &tag[0], valLen, &val[1]);
+  if (status == NFA_STATUS_OK) {
+    mNfasetDynamicPowerConfigEvent.wait();
+    if (mPwrConfstatus != NFA_STATUS_OK) {
+      LOG(ERROR) << StringPrintf("%s: Failed to set POWER CONFIGURATION. "
+                                 "Invalid input power configuration",
+                                 __FUNCTION__);
+    } else {
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: set Power configuration successful", __func__);
+      env->SetObjectField(mPwrConfResObj, mResultField, mPwrConfSuccessObj);
+    }
+  } else {
+    LOG(ERROR) << StringPrintf(
+        "%s: Failed to set POWER CONFIGURATION. Not able to get GKI buffer",
+        __FUNCTION__);
+  }
+
+  android::startRfDiscovery(true);
+
+  return mPwrConfResObj;
 }
 
 /*******************************************************************************
@@ -466,6 +639,32 @@ void PowerSwitch::deviceManagementCallback(uint8_t event,
       }
       sPowerSwitch.mPowerStateEvent.notifyOne();
     } break;
+    case NFA_DM_SET_CONFIG_EVT: // result of NFA_setDynamicPowerConfig
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: NFA_DM_SET_CONFIG_EVT", __func__);
+      {
+        sPowerSwitch.mPwrConfstatus = eventData->status;
+        SyncEventGuard guard(sPowerSwitch.mNfasetDynamicPowerConfigEvent);
+        sPowerSwitch.mNfasetDynamicPowerConfigEvent.notifyOne();
+      }
+      break;
+    case NFA_DM_GET_CONFIG_EVT: /* Result of NFA_GetConfig */
+      DLOG_IF(INFO, nfc_debug_enabled)
+          << StringPrintf("%s: NFA_DM_GET_CONFIG_EVT", __func__);
+      {
+        SyncEventGuard guard(sPowerSwitch.mNfaGetConfigEvent);
+        if (eventData->status == NFA_STATUS_OK &&
+            eventData->get_config.tlv_size <= sizeof(sPowerSwitch.mConfig)) {
+          sPowerSwitch.mCurrentConfigLen = eventData->get_config.tlv_size;
+          memcpy(sPowerSwitch.mConfig, eventData->get_config.param_tlvs,
+                 eventData->get_config.tlv_size);
+        } else {
+          LOG(ERROR) << StringPrintf("%s: NFA_DM_GET_CONFIG failed", __func__);
+          sPowerSwitch.mCurrentConfigLen = 0;
+        }
+        sPowerSwitch.mNfaGetConfigEvent.notifyOne();
+      }
+      break;
   }
 }
 

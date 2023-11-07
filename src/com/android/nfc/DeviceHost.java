@@ -38,8 +38,8 @@ package com.android.nfc;
 import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.os.Bundle;
+import com.nxp.nfc.DynamicPowerResult;
 import com.nxp.nfc.NfcTDAInfo;
-import com.nxp.nfc.PowerResult;
 import java.io.FileDescriptor;
 import java.io.IOException;
 
@@ -338,5 +338,5 @@ public interface DeviceHost {
     /**
      * Sets the power configuration to the controller
      */
-    PowerResult setPowerConfig(byte[] pwrConfig);
+    DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig);
 }
