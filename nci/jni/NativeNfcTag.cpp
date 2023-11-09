@@ -839,6 +839,15 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         break;
       }
 #if (NXP_EXTNS == TRUE)
+      } else if (tagStat == NfcTagExtns::TAG_STATUS_CHANGE_INTERFACE) {
+        if (NFA_STATUS_OK != (status = NFA_Select(0x01, NFA_PROTOCOL_ISO_DEP,
+                                                  NFC_INTERFACE_ISO_DEP))) {
+          LOG(ERROR) << StringPrintf("%s: NFA_Select failed, status = %d",
+                                     __func__, status);
+          break;
+        } else {
+          natTag.mCurrentRequestedProtocol = NFA_PROTOCOL_ISO_DEP;
+        }
       }
 #endif
       sConnectOk = false;

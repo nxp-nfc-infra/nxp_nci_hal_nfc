@@ -94,6 +94,7 @@ class NfcTagExtns {
   static const uint32_t TAG_DEACTIVATE_TO_SLEEP = 1 << 5;
   static const uint32_t TAG_DEACTIVATE_TO_IDLE = 1 << 6;
   static const uint32_t TAG_ISODEP_DEACTIVATE_FAIL = 1 << 7;
+  static const uint32_t TAG_NON_STD_T2T_SAK_TYPE = 1 << 8;
 
   /*
    * API invocation based handling for
@@ -139,6 +140,7 @@ class NfcTagExtns {
       2;                                   // Identified as Non-standard TAG
   static const int TAG_STATUS_LOST = 3;    // Tag detection failed/lost
   static const int TAG_STATUS_FAILED = 4;  // Failed while processing
+  static const int TAG_STATUS_CHANGE_INTERFACE = 5; // change discovery command
 
   static NfcTagExtns& getInstance();
   void initialize();

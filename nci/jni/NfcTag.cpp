@@ -702,6 +702,12 @@ void NfcTag::fillNativeNfcTagMembers1(JNIEnv* e, jclass tag_cls, jobject tag) {
       technologies[i] = mTechList[i];
       handles[i] = mTechHandles[i];
       types[i] = mTechLibNfcTypes[i];
+
+      if (mTechParams[0].param.pa.sel_rsp == NON_STD_T2T_CARD_SAK) {
+        if (TARGET_TYPE_ISO14443_3A == technologies[i]) {
+          technologies[i] = ISO_DEP;
+        }
+      }
     }
   }
 

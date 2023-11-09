@@ -253,6 +253,14 @@ void NfcTagExtns::processDeactivateEvent(tNFA_CONN_EVT_DATA* eventData,
 *******************************************************************************/
 void NfcTagExtns::processActivatedNtf(tNFA_CONN_EVT_DATA* data) {
   bool isTagOpertion = false;
+
+  if ((data->activated.activate_ntf.rf_tech_param.param.pa.sel_rsp ==
+       NON_STD_T2T_CARD_SAK) &&
+      (data->activated.activate_ntf.protocol == NFA_PROTOCOL_T2T) &&
+      (data->activated.activate_ntf.intf_param.type == NFC_INTERFACE_FRAME)) {
+    tagState |= TAG_NON_STD_T2T_SAK_TYPE;
+  }
+
   if ((data->activated.activate_ntf.protocol != NFA_PROTOCOL_NFC_DEP) &&
       (!isListenMode(data->activated))) {
     setRfProtocol((tNFA_INTF_TYPE)data->activated.activate_ntf.protocol,
@@ -362,8 +370,10 @@ bool NfcTagExtns::isListenMode(tNFA_ACTIVATED& activated) {
 *******************************************************************************/
 bool NfcTagExtns::checkAndClearNonStdTagState() {
   bool ret = false;
-  if (tagState & TAG_NON_STD_SAK_TYPE) {
+  if ((tagState & TAG_NON_STD_SAK_TYPE) ||
+      (tagState & TAG_NON_STD_T2T_SAK_TYPE)) {
     tagState &= ~TAG_NON_STD_SAK_TYPE;
+    tagState &= ~TAG_NON_STD_T2T_SAK_TYPE;
     DLOG_IF(INFO, android::nfc_debug_enabled)
         << StringPrintf("%s: non std Tag", __func__);
     ret = true;
@@ -756,6 +766,8 @@ tTagStatus NfcTagExtns::performTagReconnect() {
                                  __func__, status);
       ret = TAG_STATUS_FAILED;
     }
+  } else if (tagState & TAG_NON_STD_T2T_SAK_TYPE) {
+    ret = TAG_STATUS_CHANGE_INTERFACE;
   }
   return ret;
 }
@@ -893,6 +905,7 @@ void NfcTagExtns::abortTagOperation() {
   sTagActivatedMode = 0;
   sTagActivatedProtocol = 0;
   tagState &= ~TAG_NON_STD_SAK_TYPE;
+  tagState &= ~TAG_NON_STD_T2T_SAK_TYPE;
 }
 
 /******************************************************************************
