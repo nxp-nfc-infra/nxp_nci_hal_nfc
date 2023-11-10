@@ -49,7 +49,7 @@
 #define TIME_MUL_100MS 100
 #define NON_STD_CARD_SAK (0x13)
 #define NON_STD_T2T_CARD_SAK (0x53)
-#define ISO_DEP 0x03
+#define ISO_DEP_TECH 0x03
 
 typedef struct activationParams {
   int mTechParams;
