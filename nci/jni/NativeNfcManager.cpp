@@ -429,6 +429,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /* T5T doesn't support multiproto detection logic */
         NfcTag::getInstance().setNumDiscNtf(0);
       }
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.resetMfcTransceiveFlag();
+#endif
       if ((eventData->activated.activate_ntf.protocol !=
            NFA_PROTOCOL_NFC_DEP) &&
           (!isListenMode(eventData->activated))) {

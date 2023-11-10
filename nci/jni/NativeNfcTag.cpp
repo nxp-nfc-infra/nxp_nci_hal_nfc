@@ -149,6 +149,9 @@ static jboolean sMakeReadonlyWaitingForComplete = JNI_FALSE;
 static int sCurrentConnectedTargetType = TARGET_TYPE_UNKNOWN;
 static int sCurrentConnectedTargetProtocol = NFC_PROTOCOL_UNKNOWN;
 static int sCurrentConnectedHandle = 0;
+#if (NXP_EXTNS == TRUE)
+void retrySelect(tNFA_INTF_TYPE rfInterface);
+#endif
 static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded);
 static bool switchRfInterface(tNFA_INTF_TYPE rfInterface);
 
@@ -731,23 +734,22 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       {
         SyncEventGuard g3(sReconnectEvent);
 
-        if (sCurrentActivatedProtocl == NFC_PROTOCOL_UNKNOWN) {
-          if (nfcTagExtns.processNonStdTagOperation(
-                  TAG_API_REQUEST::TAG_RESELECT_API,
-                  TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
-              NfcTagExtns::TAG_STATUS_SUCCESS) {
-            LOG(ERROR) << StringPrintf("%s: TAG_HALT_PICC_OPERATION failed",
-                                       __func__);
-          }
-        } else {
-          if (sCurrentActivatedProtocl == NFA_PROTOCOL_T2T) {
-            status =
-                NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
-          } else if (sCurrentActivatedProtocl == NFA_PROTOCOL_ISO_DEP) {
-            status =
-                NFA_SendRawFrame(RW_DESELECT_REQ, sizeof(RW_DESELECT_REQ), 0);
-          }
+#if (NXP_EXTNS == TRUE)
+        if (nfcTagExtns.processNonStdTagOperation(
+                TAG_API_REQUEST::TAG_RESELECT_API,
+                TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
+            NfcTagExtns::TAG_STATUS_SUCCESS) {
+          LOG(ERROR) << StringPrintf("%s: TAG_HALT_PICC_OPERATION failed",
+                                     __func__);
         }
+#else
+        if (sCurrentConnectedTargetProtocol == NFA_PROTOCOL_T2T) {
+          status = NFA_SendRawFrame(RW_TAG_SLP_REQ, sizeof(RW_TAG_SLP_REQ), 0);
+        } else if (sCurrentConnectedTargetProtocol == NFA_PROTOCOL_ISO_DEP) {
+          status =
+              NFA_SendRawFrame(RW_DESELECT_REQ, sizeof(RW_DESELECT_REQ), 0);
+        }
+#endif
         sReconnectEvent.wait(4);
         if (status != NFA_STATUS_OK) {
           LOG(ERROR) << StringPrintf("%s: send error=%d", __func__, status);
@@ -865,7 +867,9 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         break;
       }
     }
-
+#if (NXP_EXTNS == TRUE)
+    retrySelect(rfInterface);
+#endif
     /*Retry logic in case of core Generic error while selecting a tag*/
     if (sConnectOk == false) {
       LOG(ERROR) << StringPrintf("%s: waiting for Card to be activated",
@@ -927,7 +931,43 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       << StringPrintf("%s: exit; status=%d", __func__, rVal);
   return rVal;
 }
-
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        retrySelect
+**
+** Description:     do Tag Reconnect , if previous Select is not success
+**                  after MFC classic transceive failed.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void retrySelect(tNFA_INTF_TYPE rfInterface) {
+  NfcTag& natTag = NfcTag::getInstance();
+  NfcTagExtns& nfcTagExtns = NfcTagExtns::getInstance();
+  uint8_t retryCnt = 0x00;
+  uint8_t maxRetryCOunt = 0x02;
+  while (!sConnectOk && nfcTagExtns.isMfcTransFailed() &&
+         retryCnt < maxRetryCOunt) {
+    retryCnt++;
+    SyncEventGuard g2(sReconnectEvent);
+    sConnectWaitingForComplete = JNI_TRUE;
+    gIsSelectingRfInterface = true;
+    if (retryCnt == maxRetryCOunt) {
+      nfcTagExtns.resetMfcTransceiveFlag();
+    }
+    if ((NFA_Select(natTag.mTechHandles[sCurrentConnectedHandle],
+                    natTag.mTechLibNfcTypes[sCurrentConnectedHandle],
+                    rfInterface)) != NFA_STATUS_OK) {
+      LOG(ERROR) << StringPrintf("%s: NFA_Select failed.", __func__);
+      break;
+    }
+    if (sReconnectEvent.wait(100) == false) {
+      break;
+    }
+  }
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        switchRfInterface
@@ -1137,7 +1177,7 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
   }
 
   NfcTag& natTag = NfcTag::getInstance();
-
+  NfcTagExtns& nfcTagExtns = NfcTagExtns::getInstance();
   // get input buffer and length from java call
   ScopedByteArrayRO bytes(e, data);
   uint8_t* buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(
@@ -1220,6 +1260,15 @@ static jbyteArray nativeNfcTag_doTransceive(JNIEnv* e, jobject o,
         }
 
         if (doReconnect) {
+#if (NXP_EXTNS == TRUE)
+          if (nfcTagExtns.processNonStdTagOperation(
+                  TAG_API_REQUEST::TAG_DO_TRANSCEIVE_API,
+                  TAG_OPERATION::TAG_RECONNECT_OPERATION) !=
+              NfcTagExtns::TAG_STATUS_SUCCESS) {
+            LOG(ERROR) << StringPrintf(
+                "%s: processNonStdTagOperation Operation failed", __func__);
+          }
+#endif
           nativeNfcTag_doReconnect(e, o);
         } else {
           if (transDataLen != 0) {

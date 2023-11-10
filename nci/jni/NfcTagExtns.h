@@ -38,6 +38,7 @@ typedef uint32_t tTagStatus;
 enum class TAG_API_REQUEST {
   TAG_RESELECT_API = 1,
   TAG_CHECK_NDEF_API,
+  TAG_DO_TRANSCEIVE_API,
 };
 
 enum class TAG_OPERATION {
@@ -81,7 +82,7 @@ class NfcTagExtns {
 
   uint8_t mNfcID0[4]; /* ISO-DEP TypeB NfcID value*/
   uint32_t tagState;  /* Current state in NfcTagExtns being processed*/
-
+  bool isMfcTransceiveFailed;
   /**
    * Non-standard tag state as per the API request
    * or event/notifications received.
@@ -116,6 +117,7 @@ class NfcTagExtns {
   void processtagSelectEvent(tNFA_CONN_EVT_DATA* data);
   void processDiscoveryNtf(tNFA_CONN_EVT_DATA* data);
   void processActivatedNtf(tNFA_CONN_EVT_DATA* data);
+  void processMfcTransFailed();
 
   // Support methods for Non-standard tag handling
   void storeNonStdTagData();
@@ -127,8 +129,9 @@ class NfcTagExtns {
   void updateNfcID0Param(uint8_t* nfcID0);
   bool isListenMode(tNFA_ACTIVATED& activated);
   bool checkActivatedProtoParameters(tNFA_ACTIVATED& activationData);
+  bool isSkipNdefRequired(uint8_t* receivedUid);
 
- public:
+public:
   /**
    * Public constants for Non-standard tag handling
    * status values.
@@ -155,4 +158,6 @@ class NfcTagExtns {
   void setCurrentTargetType(int type);
   void abortTagOperation();
   bool shouldSkipProtoActivate(tNFC_PROTOCOL protocol);
+  bool isMfcTransFailed();
+  void resetMfcTransceiveFlag();
 };
