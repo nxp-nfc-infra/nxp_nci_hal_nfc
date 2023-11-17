@@ -229,9 +229,10 @@ public class NfcService implements DeviceHostListener {
     static final int TASK_DISABLE_ALWAYS_ON = 5;
 
     // Static TDA ID
-    static final int CT_CID = 0x0A;
     static final int SAM1_CID = 0x0B;
     static final int SAM2_CID = 0x0C;
+    static final byte INVALID_CID = (byte)0xFF;
+    static final byte CT_NFCEE_ID = 0x20;
 
     // Polling technology masks
     static final int NFC_POLL_A = 0x01;
@@ -1946,6 +1947,11 @@ public class NfcService implements DeviceHostListener {
       public NfcTDAInfo[] discoverTDA(TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
         try {
+          if (mState != NfcAdapter.STATE_ON) {
+            Log.d(TAG, "Not in NFC mode. Failed to call the discoverTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return null;
+          }
           sendMessage(NfcService.MSG_TDA_DISCOVER, 0x00);
           synchronized (mTdaDiscInfo) { mTdaDiscInfo.wait(1000); }
         } catch (Exception e) {
@@ -1964,10 +1970,17 @@ public class NfcService implements DeviceHostListener {
       @Override
       public byte openTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle tdaBundle = new Bundle();
-        tdaBundle.putByte("tdaID", tdaID);
-        tdaBundle.putBoolean("standBy", standBy);
+
         try {
+          if ((mState != NfcAdapter.STATE_ON) ||
+              (tdaID == CT_NFCEE_ID)) { /* CT NFCEE not supported */
+            Log.d(TAG, "Not in NFC mode. Failed to call the openTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return INVALID_CID;
+          }
+          Bundle tdaBundle = new Bundle();
+          tdaBundle.putByte("tdaID", tdaID);
+          tdaBundle.putBoolean("standBy", standBy);
           sendMessage(NfcService.MSG_OPEN_TDA, tdaBundle);
           synchronized (mOpenTdaObj) { mOpenTdaObj.wait(1000); }
         } catch (Exception e) {
@@ -1975,7 +1988,7 @@ public class NfcService implements DeviceHostListener {
         }
 
         byte mCID = mOpenTdaBundle.getByte("mCID");
-        if ((mCID == CT_CID) || (mCID == SAM1_CID) || (mCID == SAM2_CID)) {
+        if ((mCID == SAM1_CID) || (mCID == SAM2_CID)) {
           tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
         } else {
           tdaResult.setStatus(TdaResult.RESULT_FAILURE);
@@ -1986,33 +1999,47 @@ public class NfcService implements DeviceHostListener {
       @Override
       public byte[] transceive(byte[] in_cmd_data, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle input_data = new Bundle();
-        byte[] rspBuff;
-        input_data.putByteArray("trans_cmd", in_cmd_data);
+
         try {
+          if (mState != NfcAdapter.STATE_ON) {
+            Log.d(TAG, "Not in NFC mode. Failed to call the transceive API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return null;
+          }
+          Bundle input_data = new Bundle();
+          byte[] rspBuff;
+          input_data.putByteArray("trans_cmd", in_cmd_data);
           sendMessage(NfcService.MSG_TRANSCEIVE_TDA, input_data);
           synchronized (mTdaTransObj) { mTdaTransObj.wait(1000); }
+
+          rspBuff = mTdaTransBundle.getByteArray("trans_rsp");
+          if (rspBuff != null) {
+            tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+          } else {
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+          }
+          return rspBuff;
+
         } catch (Exception e) {
           e.printStackTrace();
         }
-
-        rspBuff = mTdaTransBundle.getByteArray("trans_rsp");
-
-        if (rspBuff != null) {
-          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
-        } else {
-          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
-        }
-        return rspBuff;
+        return null;
       }
 
       @Override
       public void closeTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle tdaBundle = new Bundle();
-        tdaBundle.putByte("tdaID", tdaID);
-        tdaBundle.putBoolean("standBy", standBy);
+
         try {
+          if ((mState != NfcAdapter.STATE_ON) ||
+              (tdaID == CT_NFCEE_ID)) { /* CT NFCEE not supported */
+            Log.d(TAG, "Not in NFC mode. Failed to call the closeTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return;
+          }
+          Bundle tdaBundle = new Bundle();
+          tdaBundle.putByte("tdaID", tdaID);
+          tdaBundle.putBoolean("standBy", standBy);
           sendMessage(NfcService.MSG_CLOSE_TDA, tdaBundle);
           synchronized (mCloseTdaObj) { mCloseTdaObj.wait(1000); }
         } catch (Exception e) {
