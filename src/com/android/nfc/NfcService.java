@@ -56,7 +56,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.res.Resources.NotFoundException;
-import android.hardware.emvco.DiscoveryMode;
 import android.media.AudioAttributes;
 import android.media.SoundPool;
 import android.net.Uri;
@@ -119,8 +118,8 @@ import com.android.nfc.DeviceHost.TagEndpoint;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.handover.HandoverDataParser;
-import com.nxp.emvco.INfcStateChangeRequestCallback;
-import com.nxp.emvco.ProfileDiscovery;
+import com.nxp.emvco.INxpNfcStateChangeRequestCallback;
+import com.nxp.emvco.NxpProfileDiscovery;
 import com.nxp.nfc.DynamicPowerResult;
 import com.nxp.nfc.INxpNfcAdapter;
 import com.nxp.nfc.INxpNfcTDA;
@@ -151,6 +150,7 @@ import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import vendor.nxp.emvco.NxpDiscoveryMode;
 
 public class NfcService implements DeviceHostListener {
     static final boolean DBG = SystemProperties.getBoolean("persist.nfc.debug_enabled", false);
@@ -427,7 +427,7 @@ public class NfcService implements DeviceHostListener {
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
             Collections.synchronizedSet(new HashSet<>());
-    private ProfileDiscovery mProfileDiscovery;
+    private NxpProfileDiscovery mProfileDiscovery;
     private Object mOpenTdaObj = new Object();
     private Object mCloseTdaObj = new Object();
     private Object mTdaDiscInfo = new Object();
@@ -443,34 +443,33 @@ public class NfcService implements DeviceHostListener {
         return sService;
     }
 
-    private INfcStateChangeRequestCallback mNfcStateChangeCallback =
-        new INfcStateChangeRequestCallback() {
+    private INxpNfcStateChangeRequestCallback mNfcStateChangeCallback =
+        new INxpNfcStateChangeRequestCallback() {
           @Override
           public void enableNfc(boolean turnOn) {
-              Log.i(TAG, "enableNfc turnOn:" +turnOn);
-              if (turnOn) {
-                    if (mState == NfcAdapter.STATE_ON) {
-                        Log.d(TAG, "NFC is on already. Sending NFC state to EMVCo");
-                        mProfileDiscovery.onNfcStateChange(mState);
-                    } else {
-                      if (sIsNFCBinderDied) {
-                        Log.d(
-                            TAG,
-                            "Enable NFC request received during deinitialize, so Ignoring. After Nfc abort, Nfc will be ON");
-                      } else {
-                        new EnableDisableTask().execute(TASK_ENABLE);
-                      }
-                    }
+            Log.i(TAG, "enableNfc turnOn:" + turnOn);
+            if (turnOn) {
+              if (mState == NfcAdapter.STATE_ON) {
+                Log.d(TAG, "NFC is on already. Sending NFC state to EMVCo");
+                mProfileDiscovery.onNfcStateChange(mState);
               } else {
-                    if (mState == NfcAdapter.STATE_OFF) {
-                        Log.d(TAG, "NFC is off already. Sending NFC state to EMVCo");
-                        mProfileDiscovery.onNfcStateChange(mState);
-                    } else {
-                        new EnableDisableTask().execute(TASK_DISABLE);
-                    }
+                if (sIsNFCBinderDied) {
+                  Log.d(
+                      TAG,
+                      "Enable NFC request received during deinitialize, so Ignoring. After Nfc abort, Nfc will be ON");
+                } else {
+                  new EnableDisableTask().execute(TASK_ENABLE);
+                }
               }
+            } else {
+              if (mState == NfcAdapter.STATE_OFF) {
+                Log.d(TAG, "NFC is off already. Sending NFC state to EMVCo");
+                mProfileDiscovery.onNfcStateChange(mState);
+              } else {
+                new EnableDisableTask().execute(TASK_DISABLE);
+              }
+            }
           }
-
         };
 
     @Override
@@ -587,7 +586,7 @@ public class NfcService implements DeviceHostListener {
         mRoutingTableParser = new RoutingTableParser();
         Log.i(TAG, "Starting NFC service");
         mNxpNfcAdapter = new NxpNfcAdapterService();
-        mProfileDiscovery = ProfileDiscovery.getInstance(mContext);
+        mProfileDiscovery = NxpProfileDiscovery.getInstance(mContext);
         mProfileDiscovery.registerNFCStateChangeCallback(mNfcStateChangeCallback);
         mNxpNfcTdaProfile = new NxpNfcTdaProfile();
         sService = this;
@@ -918,7 +917,7 @@ public class NfcService implements DeviceHostListener {
                     if (mPrefs.getBoolean(PREF_NFC_ON, NFC_ON_DEFAULT)) {
                         Log.d(TAG, "NFC is on. Doing normal stuff. currentProfileMode:"
                                 + mProfileDiscovery.getCurrentDiscoveryMode());
-                        if (DiscoveryMode.EMVCO ==
+                        if (NxpDiscoveryMode.EMVCO ==
                             mProfileDiscovery.getCurrentDiscoveryMode()) {
                           mProfileDiscovery.setEMVCoMode(0, false);
                         } else {
@@ -1287,7 +1286,7 @@ public class NfcService implements DeviceHostListener {
         @Override
         public boolean enable() throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-            if (DiscoveryMode.EMVCO ==
+            if (NxpDiscoveryMode.EMVCO ==
                 mProfileDiscovery.getCurrentDiscoveryMode()) {
               mProfileDiscovery.setEMVCoMode(0, false);
             }
@@ -3286,7 +3285,7 @@ public class NfcService implements DeviceHostListener {
                 case MSG_NFC_HAL_DIED: {
                   Log.e(TAG, "NFC HAL Died. turning off EMVCo");
                   sIsNFCBinderDied = true;
-                  if (DiscoveryMode.EMVCO ==
+                  if (NxpDiscoveryMode.EMVCO ==
                       mProfileDiscovery.getCurrentDiscoveryMode()) {
                     mProfileDiscovery.setEMVCoMode(0, false);
                   }
