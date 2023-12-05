@@ -735,7 +735,11 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
         SyncEventGuard g3(sReconnectEvent);
 
 #if (NXP_EXTNS == TRUE)
-        if (nfcTagExtns.processNonStdTagOperation(
+        if ((sCurrentConnectedTargetProtocol == NFA_PROTOCOL_ISO_DEP) &&
+            (sCurrentConnectedTargetType  == TARGET_TYPE_ISO14443_3B)) {
+          status =
+              NFA_SendRawFrame(RW_DESELECT_REQ, sizeof(RW_DESELECT_REQ), 0);
+        } else if (nfcTagExtns.processNonStdTagOperation(
                 TAG_API_REQUEST::TAG_RESELECT_API,
                 TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
             NfcTagExtns::TAG_STATUS_SUCCESS) {
