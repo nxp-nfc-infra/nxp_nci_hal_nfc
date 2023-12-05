@@ -77,8 +77,7 @@ PowerSwitch::PowerSwitch()
     : mCurrLevel(UNKNOWN_LEVEL),
       mCurrDeviceMgtPowerState(NFA_DM_PWR_STATE_UNKNOWN),
       mExpectedDeviceMgtPowerState(NFA_DM_PWR_STATE_UNKNOWN),
-      mDesiredScreenOffPowerState(0),
-      mCurrActivity(0) {}
+      mDesiredScreenOffPowerState(0), mCurrActivity(0), mCurrentConfigLen(0) {}
 
 /*******************************************************************************
 **
@@ -152,6 +151,7 @@ void PowerSwitch::initialize(PowerLevel level) {
 ** Returns:         Status of registration.
 **
 *******************************************************************************/
+#if (NXP_EXTNS == TRUE)
 int PowerSwitch::initializeJNIElements(JNIEnv *e) {
   mPwrResultClass = e->FindClass("com/nxp/nfc/DynamicPowerResult");
   if (mPwrResultClass == nullptr) {
@@ -217,7 +217,7 @@ int PowerSwitch::initializeJNIElements(JNIEnv *e) {
   mPwrConfResObj = e->NewGlobalRef(pwrRes);
   return 0;
 }
-
+#endif
 /*******************************************************************************
 **
 ** Function:        getLevel
@@ -334,6 +334,7 @@ bool PowerSwitch::setScreenOffPowerState(ScreenOffPowerState newState) {
 **                  Otherwise, "False" shall be returned.
 **
 *******************************************************************************/
+#if (NXP_EXTNS == TRUE)
 jobject PowerSwitch::setDynamicPowerConfig(JNIEnv *env, jobject obj,
                                            jbyteArray pwr_config) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
@@ -390,7 +391,7 @@ jobject PowerSwitch::setDynamicPowerConfig(JNIEnv *env, jobject obj,
 
   return mPwrConfResObj;
 }
-
+#endif
 /*******************************************************************************
 **
 ** Function:        setModeOff
@@ -639,6 +640,7 @@ void PowerSwitch::deviceManagementCallback(uint8_t event,
       }
       sPowerSwitch.mPowerStateEvent.notifyOne();
     } break;
+#if (NXP_EXTNS == TRUE)
     case NFA_DM_SET_CONFIG_EVT: // result of NFA_setDynamicPowerConfig
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: NFA_DM_SET_CONFIG_EVT", __func__);
@@ -665,7 +667,8 @@ void PowerSwitch::deviceManagementCallback(uint8_t event,
         sPowerSwitch.mNfaGetConfigEvent.notifyOne();
       }
       break;
-  }
+#endif
+    }
 }
 
 /*******************************************************************************

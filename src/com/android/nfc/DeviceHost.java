@@ -339,4 +339,9 @@ public interface DeviceHost {
      * Sets the power configuration to the controller
      */
     DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig);
+
+    /**
+     * returns the controller chip type
+     */
+    public NfcChipType getChipType();
 }

@@ -296,7 +296,7 @@ class PowerSwitch {
   SyncEvent mPowerStateEvent;
   PowerActivity mCurrActivity;
   Mutex mMutex;
-
+#if (NXP_EXTNS == TRUE)
   jclass mPwrResultClass = NULL;
   jobject mPwrConfResObj = NULL;
   jobject mPwrConfSuccessObj = NULL;
@@ -313,7 +313,7 @@ class PowerSwitch {
   uint16_t mCurrentConfigLen;
   uint8_t mConfig[256];
   static const int PWR_CONF_VAL_INDEX;
-
+#endif
   /*******************************************************************************
   **
   ** Function:        setPowerOffSleepState

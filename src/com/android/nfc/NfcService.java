@@ -115,6 +115,7 @@ import com.android.nfc.DeviceHost.LlcpServerSocket;
 import com.android.nfc.DeviceHost.LlcpSocket;
 import com.android.nfc.DeviceHost.NfcDepEndpoint;
 import com.android.nfc.DeviceHost.TagEndpoint;
+import com.android.nfc.NfcChipType;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.handover.HandoverDataParser;
@@ -2655,8 +2656,16 @@ public class NfcService implements DeviceHostListener {
         }
 
         if (mIsHceCapable && mScreenState >= ScreenStateHelper.SCREEN_STATE_ON_LOCKED && mReaderModeParams == null) {
-            // Host routing is always enabled at lock screen or later, provided we aren't in reader mode
+          // Host routing is not enabled when the screen is locked.
+          NfcChipType chipType = mDeviceHost.getChipType();
+          if (chipType == NfcChipType.PN7220 ||
+              chipType == NfcChipType.PN7221) {
+            paramsBuilder.setEnableHostRouting(false);
+          } else {
+            // Host routing is always enabled at lock screen or later, provided
+            // we aren't in reader mode
             paramsBuilder.setEnableHostRouting(true);
+          }
         }
 
         return paramsBuilder.build();

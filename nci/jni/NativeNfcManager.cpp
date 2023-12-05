@@ -119,6 +119,9 @@ SyncEvent sNfaSetPowerSubState;
 bool legacy_mfc_reader = true;
 int recovery_option = 0;
 int nfcee_power_and_link_conf = 0;
+#if (NXP_EXTNS == TRUE)
+tNFC_chipType gChipType;
+#endif
 
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
@@ -136,6 +139,7 @@ jmethodID gCachedNfcManagerNotifyHwErrorReported;
 #if (NXP_EXTNS == TRUE)
 jmethodID gCachedNfcManagerNotifyTagAbortListeners;
 jmethodID gCachedNfcManagerNotifyNfcHalBinderDied;
+jobjectArray gCachedNfcChipTypeValues = NULL;
 #endif
 
 const char* gNativeP2pDeviceClassName =
@@ -735,6 +739,17 @@ static void nfaConnectionCallback(uint8_t connEvent,
   }
 }
 
+#if (NXP_EXTNS == TRUE)
+static void initializeChipTypeStruc(JNIEnv *env) {
+  jclass nfcChipTypeClass = env->FindClass("com/android/nfc/NfcChipType");
+
+  jmethodID nfcChipTypeValuesMethod = env->GetStaticMethodID(
+      nfcChipTypeClass, "values", "()[Lcom/android/nfc/NfcChipType;");
+  jobjectArray nfcChipTypeValues = (jobjectArray)env->CallStaticObjectMethod(
+      nfcChipTypeClass, nfcChipTypeValuesMethod);
+  gCachedNfcChipTypeValues = (jobjectArray)env->NewGlobalRef(nfcChipTypeValues);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        nfcManager_initNativeStruc
@@ -751,6 +766,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   initializeMfcReaderOption();
   initializeRecoveryOption();
   initializeNfceePowerAndLinkConf();
+#if (NXP_EXTNS == TRUE)
+  initializeChipTypeStruc(e);
+#endif
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -1245,7 +1263,6 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
-  tNFC_chipType chipType;
   tNFA_MW_VERSION mwVer;
 #endif
   initializeGlobalDebugEnabledFlag();
@@ -1260,14 +1277,14 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
     goto TheEnd;
   }
 #if (NXP_EXTNS == TRUE)
-    chipType = NFA_GetChipVersion();
-    DLOG_IF(INFO, true) << StringPrintf(
-        "%s:  NFA_GetChipVersion : chipType = %u", __func__,chipType);
-    mwVer=  NFA_GetMwVersion();
-    DLOG_IF(INFO, true) << StringPrintf(
-        "%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x", __func__,
-        mwVer.validation, mwVer.android_version,
-        mwVer.major_version, mwVer.minor_version);
+  gChipType = NFA_GetChipVersion();
+  DLOG_IF(INFO, true) << StringPrintf(
+      "%s:  NFA_GetChipVersion : gChipType = %u", __func__, gChipType);
+  mwVer = NFA_GetMwVersion();
+  DLOG_IF(INFO, true) << StringPrintf(
+      "%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x", __func__,
+      mwVer.validation, mwVer.android_version, mwVer.major_version,
+      mwVer.minor_version);
 #endif
 
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
@@ -2130,7 +2147,8 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
   }
 
   if ((nfcFL.chipType == pn7220) && (state == NFA_SCREEN_STATE_ON_UNLOCKED) &&
-      (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED)) {
+      (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
+       prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
     NFA_StartRfDiscovery();
   }
 
@@ -2362,9 +2380,9 @@ static jbyteArray nfcManager_doGetRoutingTable(JNIEnv* e, jobject o) {
 **
 ** Returns:         Return set power configuration results.
 **                  Return "Success" when power configuration successfully
-*applied to controller.
+**                  applied to controller.
 **                  Returns VALUE_ALREADY_EXISTS, if given power configuration
-*already exist in controller.
+**                  already exist in controller.
 **                  Otherwise, "False" shall be returned.
 **
 *******************************************************************************/
@@ -2372,6 +2390,28 @@ jobject nfcManager_setDynamicPowerConfig(JNIEnv *env, jobject obj,
                                          jbyteArray pwr_config) {
   return PowerSwitch::getInstance().setDynamicPowerConfig(env, obj, pwr_config);
 }
+
+/*******************************************************************************
+**
+** Function:        nfcManager_getChipType
+**
+** Description:     returns the controller chip type
+**
+** Parameter:       void
+**
+** Returns:         Returns chip type of the controller, if it is configured
+**                  properly, otherwise returns default chip type value
+*(PN7220).
+**
+**
+*******************************************************************************/
+#if (NXP_EXTNS == TRUE)
+jobject nfcManager_getChipType(JNIEnv *env, jobject obj) {
+  jobject chipTypeObj =
+      env->GetObjectArrayElement(gCachedNfcChipTypeValues, (int)gChipType);
+  return chipTypeObj;
+}
+#endif
 
 /*****************************************************************************
 **
@@ -2474,8 +2514,12 @@ static JNINativeMethod gMethods[] = {
     {"getMaxRoutingTableSize", "()I",
      (void *)nfcManager_doGetMaxRoutingTableSize},
     {"getT4TNfceePowerState", "()I", (void *)nfcManager_getT4TNfceePowerState},
+#if (NXP_EXTNS == TRUE)
     {"setDynamicPowerConfig", "([B)Lcom/nxp/nfc/DynamicPowerResult;",
      (void *)nfcManager_setDynamicPowerConfig},
+    {"getChipType", "()Lcom/android/nfc/NfcChipType;",
+     (void *)nfcManager_getChipType},
+#endif
 };
 
 /*******************************************************************************
