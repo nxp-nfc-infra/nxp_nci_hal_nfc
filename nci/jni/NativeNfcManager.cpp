@@ -2098,18 +2098,20 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     discovry_param =
         NCI_LISTEN_DH_NFCEE_ENABLE_MASK | NCI_POLLING_DH_ENABLE_MASK;
   }
-#if 0
-  SyncEventGuard guard(gNfaSetConfigEvent);
-  status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
-                         NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
-  if (status == NFA_STATUS_OK) {
-    gNfaSetConfigEvent.wait();
-  } else {
-    LOG(ERROR) << StringPrintf("%s: Failed to update CON_DISCOVER_PARAM",
-                               __FUNCTION__);
-    return;
+
+  if (nfcFL.chipType == pn7160) {
+    SyncEventGuard guard(gNfaSetConfigEvent);
+    status = NFA_SetConfig(NCI_PARAM_ID_CON_DISCOVERY_PARAM,
+                           NCI_PARAM_LEN_CON_DISCOVERY_PARAM, &discovry_param);
+    if (status == NFA_STATUS_OK) {
+      gNfaSetConfigEvent.wait();
+    } else {
+      LOG(ERROR) << StringPrintf("%s: Failed to update CON_DISCOVER_PARAM",
+                                 __FUNCTION__);
+      return;
+    }
   }
-#endif
+
   // skip remaining SetScreenState tasks when trying to silent recover NFCC
   if (recovery_option && sIsRecovering) {
     prevScreenState = state;
