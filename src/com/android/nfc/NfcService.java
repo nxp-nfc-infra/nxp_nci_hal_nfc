@@ -2655,12 +2655,19 @@ public class NfcService implements DeviceHostListener {
             paramsBuilder.setEnableP2p(false);
         }
 
-        if (mIsHceCapable && mScreenState >= ScreenStateHelper.SCREEN_STATE_ON_LOCKED && mReaderModeParams == null) {
-          // Host routing is not enabled when the screen is locked.
+        if (mIsHceCapable &&
+            mScreenState >= ScreenStateHelper.SCREEN_STATE_ON_LOCKED &&
+            mReaderModeParams == null) {
           NfcChipType chipType = mDeviceHost.getChipType();
           if (chipType == NfcChipType.PN7220 ||
               chipType == NfcChipType.PN7221) {
-            paramsBuilder.setEnableHostRouting(false);
+            if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
+              // Host routing is enabled only when the screen is un-locked.
+              paramsBuilder.setEnableHostRouting(true);
+            } else {
+              // Host routing is not enabled when the screen is locked.
+              paramsBuilder.setEnableHostRouting(false);
+            }
           } else {
             // Host routing is always enabled at lock screen or later, provided
             // we aren't in reader mode
