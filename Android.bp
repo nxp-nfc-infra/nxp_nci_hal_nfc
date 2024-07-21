@@ -18,9 +18,17 @@ android_app {
         "nci/**/*.java",
         ":statslog-Nfc-java-gen",
     ],
+    uses_libs: [
+        "com.nxp.emvco",
+        "com.nxp.nfc",
+    ],
     platform_apis: true,
     certificate: "platform",
     jni_libs: ["libnfc_nci_jni"],
+    libs: [
+        "com.nxp.emvco",
+        "com.nxp.nfc",
+    ],
     static_libs: [
         "android.se.omapi-V1-java",
         "androidx.annotation_annotation",

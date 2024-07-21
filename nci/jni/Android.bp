@@ -10,7 +10,7 @@ cc_library_shared {
         "-Wextra",
         "-Wno-unused-parameter",
         "-Werror",
-
+        "-DNXP_EXTNS=TRUE",
         "-DNXP_UICC_ENABLE",
     ],
 
