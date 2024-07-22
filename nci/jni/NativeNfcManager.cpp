@@ -57,6 +57,8 @@ extern bool gIsTagDeactivating;
 extern bool gIsSelectingRfInterface;
 const char* gNativeT4tNfceeClassName =
     "com/android/nfc/dhimpl/NativeT4tNfceeManager";
+const char *gNativeNfcTdaProfileClassName =
+    "com/android/nfc/dhimpl/NativeNfcTdaManager";
 extern void nativeNfcTag_doTransceiveStatus(tNFA_STATUS status, uint8_t* buf,
                                             uint32_t buflen);
 extern void nativeNfcTag_notifyRfTimeout();

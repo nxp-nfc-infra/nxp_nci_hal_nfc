@@ -64,6 +64,8 @@ jint JNI_OnLoad(JavaVM* jvm, void*) {
     return JNI_ERR;
   if (android::register_com_android_nfc_NativeT4tNfcee(e) == -1)
     return JNI_ERR;
+  if (android::register_com_android_nfc_NativeNfcTda(e) == -1)
+    return JNI_ERR;
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: exit", __func__);
   return JNI_VERSION_1_6;
 }

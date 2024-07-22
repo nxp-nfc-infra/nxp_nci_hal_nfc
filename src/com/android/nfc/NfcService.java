@@ -102,7 +102,10 @@ import com.android.nfc.dhimpl.NativeNfcManager;
 import com.android.nfc.Utils;
 import com.android.nfc.handover.HandoverDataParser;
 import com.nxp.nfc.INxpNfcAdapter;
+import com.nxp.nfc.INxpNfcTDA;
 import com.nxp.nfc.NfcConstants;
+import com.nxp.nfc.NfcTDAInfo;
+import com.nxp.nfc.TdaResult;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -115,8 +118,8 @@ import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.security.SecureRandom;
@@ -185,6 +188,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     static final String MSG_ROUTE_AID_PARAM_TAG = "power";
 
+    static final int MSG_TDA_DISCOVER = 22;
+    static final int MSG_OPEN_TDA = 23;
+    static final int MSG_TRANSCEIVE_TDA = 24;
+    static final int MSG_CLOSE_TDA = 25;
+
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
     private int ROUTE_ID_T4T_NFCEE = 0x10;
@@ -199,6 +207,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int TASK_BOOT = 3;
     static final int TASK_ENABLE_ALWAYS_ON = 4;
     static final int TASK_DISABLE_ALWAYS_ON = 5;
+
+    // Static TDA ID
+    static final int CT_CID = 0x0A;
+    static final int SAM1_CID = 0x0B;
+    static final int SAM2_CID = 0x0C;
 
     // Polling technology masks
     static final int NFC_POLL_A = 0x01;
@@ -341,6 +354,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     SoundPool mSoundPool; // playback synchronized on this
     TagService mNfcTagService;
     NfcAdapterService mNfcAdapter;
+    NxpNfcTdaProfile mNxpNfcTdaProfile;
     NfcDtaService mNfcDtaService;
     NxpNfcAdapterService mNxpNfcAdapter;
     RoutingTableParser mRoutingTableParser;
@@ -394,6 +408,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
             Collections.synchronizedSet(new HashSet<>());
+    private Object mOpenTdaObj = new Object();
+    private Object mCloseTdaObj = new Object();
+    private Object mTdaDiscInfo = new Object();
+    private Object mTdaTransObj = new Object();
+    private Bundle mOpenTdaBundle = new Bundle();
+    private Bundle mCloseTdaBundle = new Bundle();
+    private Bundle mTdaTransBundle = new Bundle();
+    NfcTDAInfo[] mTdaInfo = null;
 
     public static NfcService getInstance() {
         return sService;
@@ -539,8 +561,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mNfcAdapter = new NfcAdapterService();
         mRoutingTableParser = new RoutingTableParser();
         Log.i(TAG, "Starting NFC service");
-	mNxpNfcAdapter = new NxpNfcAdapterService();
-
+        mNxpNfcAdapter = new NxpNfcAdapterService();
+        mNxpNfcTdaProfile = new NxpNfcTdaProfile();
         sService = this;
 
         mScreenStateHelper = new ScreenStateHelper(mContext);
@@ -1385,6 +1407,18 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             if (DBG) Log.d(TAG, "Polling is resumed");
         }
 
+        /**
+         * An interface for nxp nfc TDA profile
+         */
+        @Override
+        public IBinder getNxpNfcTdaAdapterVendorInterface(String vendor) {
+          if (vendor.equalsIgnoreCase("nxp_nfc_tda")) {
+            return (IBinder)mNxpNfcTdaProfile;
+          } else {
+            return null;
+          }
+        }
+
         @Override
         public boolean isNfcSecureEnabled() throws RemoteException {
             synchronized (NfcService.this) {
@@ -1902,6 +1936,95 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     }
 
+    final class NxpNfcTdaProfile extends INxpNfcTDA.Stub {
+
+      @Override
+      public NfcTDAInfo[] discoverTDA(TdaResult tdaResult) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        try {
+          sendMessage(NfcService.MSG_TDA_DISCOVER, 0x00);
+          synchronized (mTdaDiscInfo) { mTdaDiscInfo.wait(1000); }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+
+        if (mTdaInfo != null) {
+          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+          return mTdaInfo;
+        } else {
+          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+          return null;
+        }
+      }
+
+      @Override
+      public byte openTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        Bundle tdaBundle = new Bundle();
+        tdaBundle.putByte("tdaID", tdaID);
+        tdaBundle.putBoolean("standBy", standBy);
+        try {
+          sendMessage(NfcService.MSG_OPEN_TDA, tdaBundle);
+          synchronized (mOpenTdaObj) { mOpenTdaObj.wait(1000); }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+
+        byte mCID = mOpenTdaBundle.getByte("mCID");
+        if ((mCID == CT_CID) || (mCID == SAM1_CID) || (mCID == SAM2_CID)) {
+          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+        } else {
+          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+        }
+        return mCID;
+      }
+
+      @Override
+      public byte[] transceive(byte[] in_cmd_data, TdaResult tdaResult) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        Bundle input_data = new Bundle();
+        byte[] rspBuff;
+        input_data.putByteArray("trans_cmd", in_cmd_data);
+        try {
+          sendMessage(NfcService.MSG_TRANSCEIVE_TDA, input_data);
+          synchronized (mTdaTransObj) { mTdaTransObj.wait(1000); }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+
+        rspBuff = mTdaTransBundle.getByteArray("trans_rsp");
+
+        if (rspBuff != null) {
+          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+        } else {
+          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+        }
+        return rspBuff;
+      }
+
+      @Override
+      public void closeTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
+        NfcPermissions.enforceUserPermissions(mContext);
+        Bundle tdaBundle = new Bundle();
+        tdaBundle.putByte("tdaID", tdaID);
+        tdaBundle.putBoolean("standBy", standBy);
+        try {
+          sendMessage(NfcService.MSG_CLOSE_TDA, tdaBundle);
+          synchronized (mCloseTdaObj) { mCloseTdaObj.wait(1000); }
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
+
+        byte st = mCloseTdaBundle.getByte("status");
+        if (st == 0x00) {
+          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+        } else {
+          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+        }
+        return;
+      }
+    }
+
     final class SeServiceDeathRecipient implements IBinder.DeathRecipient {
         @Override
         public void binderDied() {
@@ -1911,8 +2034,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
     }
-
-
 
     final class ReaderModeDeathRecipient implements IBinder.DeathRecipient {
         @Override
@@ -3019,10 +3140,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     int status = mDeviceHost.doWriteT4tData(fileId, writeData, length);
                     mT4tNfceeReturnBundle.putInt("writeStatus", status);
                     synchronized (mT4tNfcEeObj) {
-                        mT4tNfcEeObj.notify();
+                            mT4tNfcEeObj.notify();
                     }
-                        break;
-                    }
+                    break;
+                }
 
                 case MSG_READ_T4TNFCEE: {
                     Bundle readBundle = (Bundle) msg.obj;
@@ -3033,7 +3154,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                         mT4tNfcEeObj.notify();
                     }
                     break;
-                    }
+                }
                 case MSG_DELAY_POLLING:
                     synchronized (NfcService.this) {
                         if (!mPollDelayed) {
@@ -3044,6 +3165,40 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     }
                     if (DBG) Log.d(TAG, "Polling is started");
                     break;
+                case MSG_TDA_DISCOVER: {
+                  mTdaInfo = mDeviceHost.discoverTDA();
+                  synchronized (mTdaDiscInfo) { mTdaDiscInfo.notify(); }
+                  break;
+                }
+                case MSG_OPEN_TDA: {
+                  Bundle tdaBundle = (Bundle)msg.obj;
+                  byte tdaID = tdaBundle.getByte("tdaID");
+                  boolean standBy = tdaBundle.getBoolean("standBy");
+                  byte mCID = mDeviceHost.openTDA(tdaID, standBy);
+                  mOpenTdaBundle.clear();
+                  mOpenTdaBundle.putByte("mCID", mCID);
+                  synchronized (mOpenTdaObj) { mOpenTdaObj.notify(); }
+                  break;
+                }
+                case MSG_TRANSCEIVE_TDA: {
+                  Bundle tdaTransBundle = (Bundle)msg.obj;
+                  byte[] trans_cmd = tdaTransBundle.getByteArray("trans_cmd");
+                  byte[] trans_rsp = mDeviceHost.transceive(trans_cmd);
+                  mTdaTransBundle.clear();
+                  mTdaTransBundle.putByteArray("trans_rsp", trans_rsp);
+                  synchronized (mTdaTransObj) { mTdaTransObj.notify(); }
+                  break;
+                }
+                case MSG_CLOSE_TDA: {
+                  Bundle tdaBundle = (Bundle)msg.obj;
+                  byte tdaID = tdaBundle.getByte("tdaID");
+                  boolean standBy = tdaBundle.getBoolean("standBy");
+                  byte status = mDeviceHost.closeTDA(tdaID, standBy);
+                  mCloseTdaBundle.clear();
+                  mCloseTdaBundle.putByte("status", status);
+                  synchronized (mCloseTdaObj) { mCloseTdaObj.notify(); }
+                  break;
+                }
                 default:
                     Log.e(TAG, "Unknown message received");
                     break;

@@ -21,6 +21,7 @@ cc_library_shared {
         "system/nfc/src/nfa/include",
         "system/nfc/src/nfc/include",
         "system/nfc/src/include",
+        "system/nfc/src/include/tda",
         "system/nfc/src/gki/ulinux",
         "system/nfc/src/gki/common",
         "system/nfc/utils/include",
@@ -35,6 +36,7 @@ cc_library_shared {
         "libchrome",
         "libbase",
         "libstatslog_nfc",
+        "vendor.nxp.nxpnfc@2.0",
     ],
 
     static_libs: ["libxml2"],
