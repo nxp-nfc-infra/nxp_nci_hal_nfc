@@ -47,6 +47,7 @@
 #if(NXP_EXTNS == TRUE)
 #include "nfa_nfcee_int.h"
 #include "NativeT4tNfcee.h"
+#include "Nxp_Features.h"
 #endif
 
 using android::base::StringPrintf;
@@ -1146,6 +1147,9 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 **
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
+#if (NXP_EXTNS == TRUE)
+  tNFC_chipType chipType;
+#endif
   initializeGlobalDebugEnabledFlag();
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
@@ -1157,7 +1161,11 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         << StringPrintf("%s: already enabled", __func__);
     goto TheEnd;
   }
-
+#if (NXP_EXTNS == TRUE)
+    chipType = NFA_GetChipVersion();
+    DLOG_IF(INFO, true) << StringPrintf(
+        "%s:  NFA_GetChipVersion : chipType = %u", __func__,chipType);
+#endif
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
 
   {
