@@ -1150,6 +1150,7 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
+  tNFA_MW_VERSION mwVer;
   tNFC_chipType chipType;
 #endif
   initializeGlobalDebugEnabledFlag();
@@ -1167,6 +1168,11 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
     chipType = NFA_GetChipVersion();
     DLOG_IF(INFO, true) << StringPrintf(
         "%s:  NFA_GetChipVersion : chipType = %u", __func__,chipType);
+    mwVer=  NFA_GetMwVersion();
+    DLOG_IF(INFO, true) << StringPrintf(
+        "%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x", __func__,
+        mwVer.validation, mwVer.android_version,
+        mwVer.major_version, mwVer.minor_version);
 #endif
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
 
