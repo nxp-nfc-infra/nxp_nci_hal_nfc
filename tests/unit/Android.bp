@@ -12,6 +12,7 @@ android_test {
         "android.test.base",
         "android.test.mock",
         "com.nxp.nfc",
+        "com.nxp.emvco",
     ],
 
     static_libs: [
@@ -36,7 +37,9 @@ android_test {
       "src/**/*.java",
       ":nfc-sources",
     ],
-    uses_libs: ["com.nxp.nfc"],
+    uses_libs: ["com.nxp.nfc",
+                "com.nxp.emvco",
+    ],
 
     platform_apis: true,
 

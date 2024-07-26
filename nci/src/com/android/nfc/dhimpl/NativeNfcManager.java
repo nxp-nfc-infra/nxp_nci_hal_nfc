@@ -23,6 +23,7 @@ import android.nfc.tech.TagTechnology;
 import android.util.Log;
 import com.android.nfc.DeviceHost;
 import com.android.nfc.LlcpException;
+import com.android.nfc.NfcChipType;
 import com.android.nfc.NfcDiscoveryParameters;
 import com.nxp.nfc.DynamicPowerResult;
 import com.nxp.nfc.NfcTDAInfo;
@@ -458,6 +459,8 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public native DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig);
 
+    @Override public native NfcChipType getChipType();
+
     @Override
     public NfcTDAInfo[] discoverTDA() {
       return mTdaMgr.discoverTDA();
@@ -513,6 +516,8 @@ public class NativeNfcManager implements DeviceHost {
     private void notifyRfFieldActivated() {
         mListener.onRemoteFieldActivated();
     }
+
+    private void notifyNfcHalBinderDied() { mListener.onNfcHalBinderDied(); }
 
     private void notifyRfFieldDeactivated() {
         mListener.onRemoteFieldDeactivated();

@@ -13,7 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP
+ *
+ *  Copyright 2022-2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
 #include <cutils/properties.h>
@@ -98,6 +116,9 @@ SyncEvent gDeactivatedEvent;
 SyncEvent sNfaSetPowerSubState;
 int recovery_option = 0;
 int nfcee_power_and_link_conf = 0;
+#if (NXP_EXTNS == TRUE)
+tNFC_chipType gChipType;
+#endif
 
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
@@ -112,6 +133,12 @@ jmethodID gCachedNfcManagerNotifyRfFieldActivated;
 jmethodID gCachedNfcManagerNotifyRfFieldDeactivated;
 jmethodID gCachedNfcManagerNotifyEeUpdated;
 jmethodID gCachedNfcManagerNotifyHwErrorReported;
+#if (NXP_EXTNS == TRUE)
+jmethodID gCachedNfcManagerNotifyTagAbortListeners;
+jmethodID gCachedNfcManagerNotifyNfcHalBinderDied;
+jobjectArray gCachedNfcChipTypeValues = NULL;
+#endif
+
 const char* gNativeP2pDeviceClassName =
     "com/android/nfc/dhimpl/NativeP2pDevice";
 const char* gNativeLlcpServiceSocketClassName =
@@ -666,6 +693,17 @@ static void nfaConnectionCallback(uint8_t connEvent,
   }
 }
 
+#if (NXP_EXTNS == TRUE)
+static void initializeChipTypeStruc(JNIEnv *env) {
+  jclass nfcChipTypeClass = env->FindClass("com/android/nfc/NfcChipType");
+
+  jmethodID nfcChipTypeValuesMethod = env->GetStaticMethodID(
+      nfcChipTypeClass, "values", "()[Lcom/android/nfc/NfcChipType;");
+  jobjectArray nfcChipTypeValues = (jobjectArray)env->CallStaticObjectMethod(
+      nfcChipTypeClass, nfcChipTypeValuesMethod);
+  gCachedNfcChipTypeValues = (jobjectArray)env->NewGlobalRef(nfcChipTypeValues);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        nfcManager_initNativeStruc
@@ -681,6 +719,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   initializeGlobalDebugEnabledFlag();
   initializeRecoveryOption();
   initializeNfceePowerAndLinkConf();
+#if (NXP_EXTNS == TRUE)
+  initializeChipTypeStruc(e);
+#endif
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -735,6 +776,11 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
 
   gCachedNfcManagerNotifyHwErrorReported =
       e->GetMethodID(cls.get(), "notifyHwErrorReported", "()V");
+
+#if (NXP_EXTNS == TRUE)
+  gCachedNfcManagerNotifyNfcHalBinderDied =
+      e->GetMethodID(cls.get(), "notifyNfcHalBinderDied", "()V");
+#endif
 
   if (nfc_jni_cache_object(e, gNativeNfcTagClassName, &(nat->cached_NfcTag)) ==
       -1) {
@@ -951,6 +997,19 @@ void nfaDeviceManagementCallback(uint8_t dmEvent,
       SyncEventGuard guard(sNfaSetPowerSubState);
       sNfaSetPowerSubState.notifyOne();
     } break;
+#if (NXP_EXTNS == TRUE)
+    case NFA_DM_NFC_HAL_BINDER_DIED_EVT: {
+      struct nfc_jni_native_data *nat = getNative(NULL, NULL);
+      JNIEnv *e = NULL;
+      ScopedAttach attach(nat->vm, &e);
+      if (e == NULL) {
+        LOG(ERROR) << StringPrintf("jni env is null");
+        return;
+      }
+      e->CallVoidMethod(nat->manager,
+                        android::gCachedNfcManagerNotifyNfcHalBinderDied);
+    } break;
+#endif
     default:
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: unhandled event", __func__);
@@ -2270,6 +2329,28 @@ jobject nfcManager_setDynamicPowerConfig(JNIEnv *env, jobject obj,
   return PowerSwitch::getInstance().setDynamicPowerConfig(env, obj, pwr_config);
 }
 
+/*******************************************************************************
+**
+** Function:        nfcManager_getChipType
+**
+** Description:     returns the controller chip type
+**
+** Parameter:       void
+**
+** Returns:         Returns chip type of the controller, if it is configured
+**                  properly, otherwise returns default chip type value
+*(PN7220).
+**
+**
+*******************************************************************************/
+#if (NXP_EXTNS == TRUE)
+jobject nfcManager_getChipType(JNIEnv *env, jobject obj) {
+  jobject chipTypeObj =
+      env->GetObjectArrayElement(gCachedNfcChipTypeValues, (int)gChipType);
+  return chipTypeObj;
+}
+#endif
+
 /*****************************************************************************
 **
 ** JNI functions for android-4.0.1_r1
@@ -2375,6 +2456,8 @@ static JNINativeMethod gMethods[] = {
 #if (NXP_EXTNS == TRUE)
     {"setDynamicPowerConfig", "([B)Lcom/nxp/nfc/DynamicPowerResult;",
      (void *)nfcManager_setDynamicPowerConfig},
+    {"getChipType", "()Lcom/android/nfc/NfcChipType;",
+     (void *)nfcManager_getChipType},
 #endif
 };
 
