@@ -66,6 +66,7 @@
 #include "nfa_nfcee_int.h"
 #include "NativeT4tNfcee.h"
 #include "Nxp_Features.h"
+#include "NfcTagExtns.h"
 #endif
 
 using android::base::StringPrintf;
@@ -316,6 +317,7 @@ static void handleRfDiscoveryEvent(tNFC_RESULT_DEVT* discoveredDevice) {
 static void nfaConnectionCallback(uint8_t connEvent,
                                   tNFA_CONN_EVT_DATA* eventData) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
+  NfcTagExtns& nfcTagExtns = NfcTagExtns::getInstance();
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: event= %u", __func__, connEvent);
 
@@ -371,6 +373,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
                                    __func__, status);
       } else {
         NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
+#if (NXP_EXTNS == TRUE)
+        nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DISC_RESULT_EVENT,
+                                            eventData);
+#endif
         handleRfDiscoveryEvent(&eventData->disc_result.discovery_ntf);
       }
       break;
@@ -400,6 +406,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
       DLOG_IF(INFO, nfc_debug_enabled)
           << StringPrintf("%s: NFA_DEACTIVATE_FAIL_EVT: status = %d", __func__,
                           eventData->status);
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DEACTIVATE_FAIL_EVENT,
+                                          eventData);
+#endif
       break;
 
     case NFA_ACTIVATED_EVT:  // NFC link/protocol activated
@@ -414,6 +424,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /* T5T doesn't support multiproto detection logic */
         NfcTag::getInstance().setNumDiscNtf(0);
       }
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.resetMfcTransceiveFlag();
+#endif
       if ((eventData->activated.activate_ntf.protocol !=
            NFA_PROTOCOL_NFC_DEP) &&
           (!isListenMode(eventData->activated))) {
@@ -424,13 +437,20 @@ static void nfaConnectionCallback(uint8_t connEvent,
       NfcTag::getInstance().setActive(true);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
-
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_ACTIVATED_EVENT,
+                                          eventData);
+#endif
+#if (NXP_EXTNS != TRUE)
       NfcTag::getInstance().setActivationState();
+#endif
       if (gIsSelectingRfInterface) {
         nativeNfcTag_doConnectStatus(true);
         break;
       }
-
+#if (NXP_EXTNS == TRUE)
+      NfcTag::getInstance().setActivationState();
+#endif
       nativeNfcTag_resetPresenceCheck();
       if (!isListenMode(eventData->activated) &&
           (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
@@ -486,6 +506,11 @@ static void nfaConnectionCallback(uint8_t connEvent,
           __func__, eventData->deactivated.type, gIsTagDeactivating);
       NfcTag::getInstance().setDeactivationState(eventData->deactivated);
       NfcTag::getInstance().selectNextTagIfExists();
+#if (NXP_EXTNS == TRUE)
+      // can be moved to non-std tag handling
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DEACTIVATE_EVENT,
+                                          eventData);
+#endif
       if (eventData->deactivated.type != NFA_DEACTIVATE_TYPE_SLEEP) {
         {
           SyncEventGuard g(gDeactivatedEvent);
@@ -493,8 +518,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
           gDeactivatedEvent.notifyOne();
         }
         nativeNfcTag_resetPresenceCheck();
+#if (NXP_EXTNS != TRUE)
         NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
         nativeNfcTag_abortWaits();
+#endif
         NfcTag::getInstance().abort();
       } else if (gIsTagDeactivating) {
         NfcTag::getInstance().setActive(false);
@@ -1066,11 +1093,13 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
   buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   bufLen = bytes.size();
   #if (NXP_EXTNS == TRUE)
+    if (nfcFL.chipType == pn7160) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 1", __func__);
     NativeT4tNfcee::getInstance().checkAndUpdateT4TAid(buf, (uint8_t*)&bufLen);
 
     RoutingManager::getInstance().removeAidRouting(buf, bufLen);
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: check and update AID 2", __func__);
+  }
   #endif
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
                                                      aidInfo, power);

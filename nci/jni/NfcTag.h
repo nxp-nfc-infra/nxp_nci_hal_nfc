@@ -17,7 +17,25 @@
 /*
  *  Tag-reading, tag-writing operations.
  */
-
+/******************************************************************************
+*
+*  The original Work has been changed by NXP.
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*  http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+*  Copyright 2023 NXP
+*
+******************************************************************************/
 #pragma once
 #include <vector>
 
@@ -28,14 +46,36 @@
 
 #define MIN_FWI (11)
 #define MAX_FWI (14)
+#if (NXP_EXTNS == TRUE)
+#define TIME_MUL_100MS 100
+#define NON_STD_CARD_SAK (0x13)
+#define NON_STD_T2T_CARD_SAK (0x53)
+#define ISO_DEP_TECH 0x03
 
+typedef struct activationParams {
+  int mTechParams;
+  int mTechLibNfcTypes;
+} activationParams_t;
+#endif
 class NfcTag {
   friend class NfcTagTest;
 
  public:
-  enum ActivationState { Idle, Sleep, Active };
+#if (NXP_EXTNS == TRUE)
+  enum ActivationState { Idle, Sleep, Active, InActive };
+#else
+   enum ActivationState { Idle, Sleep, Active };
+#endif
   static const int MAX_NUM_TECHNOLOGY =
       11;  // max number of technologies supported by one or more tags
+#if (NXP_EXTNS == TRUE)
+  int mTechLibNfcTypesDiscData[MAX_NUM_TECHNOLOGY];  // array of detailed tag
+                                                     // types ( RF Protocol)
+                                                     // received from
+                                                     // RF_DISC_NTF
+  int mNumDiscNtf;
+  activationParams_t mActivationParams_t;
+#endif
   int mTechList[MAX_NUM_TECHNOLOGY];  // array of NFC technologies according to
                                       // NFC service
   int mTechHandles[MAX_NUM_TECHNOLOGY];  // array of tag handles (RF DISC ID)
@@ -46,6 +86,12 @@ class NfcTag {
                                              // service received from
                                              // RF_INTF_ACTIVATED NTF
   int mNumTechList;  // current number of NFC technologies in the list
+#if (NXP_EXTNS == TRUE)
+  int mTechListIndex;
+  bool mIsMultiProtocolTag;
+  int  mCurrentRequestedProtocol;
+  uint8_t mNfcID0[4];
+#endif
 
   /*******************************************************************************
   **
@@ -148,7 +194,41 @@ class NfcTag {
   **
   *******************************************************************************/
   void setActivationState();
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        resetActivationState
+**
+** Description:     Set the state to InActive due tag lost.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+  void resetActivationState();
 
+  /*******************************************************************************
+   **
+   ** Function:        notifyNfcAbortTagops()
+   **
+   ** Description:     Notify service to abort TAG ops.
+   **
+   ** Returns:         None
+   **
+   *******************************************************************************/
+  static void notifyNfcAbortTagops(union sigval);
+
+/*******************************************************************************
+**
+** Function         clearNonStdMfcState
+**
+** Description      Clear Non standard MFC states
+**
+** Returns          None
+**
+*******************************************************************************/
+void clearNonStdMfcState();
+
+#endif
   /*******************************************************************************
   **
   ** Function:        getProtocol
@@ -441,14 +521,15 @@ class NfcTag {
   int mTechHandlesDiscData[MAX_NUM_TECHNOLOGY];      // array of tag handles (RF
                                                      // DISC ID) received from
                                                      // RF_DISC_NTF
+#if (NXP_EXTNS == FALSE)
   int mTechLibNfcTypesDiscData[MAX_NUM_TECHNOLOGY];  // array of detailed tag
                                                      // types ( RF Protocol)
                                                      // received from
                                                      // RF_DISC_NTF
   int mNumDiscNtf;
+#endif
   int mNumDiscTechList;
   int mTechListTail;  // Index of Last added entry in mTechList
-  bool mIsMultiProtocolTag;
   NfcStatsUtil* mNfcStatsUtil;
 
   /*******************************************************************************

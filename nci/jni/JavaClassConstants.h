@@ -40,4 +40,7 @@ extern const char* gNativeNfcTagClassName;
 extern const char* gNativeNfcManagerClassName;
 extern const char* gNativeT4tNfceeClassName;
 extern const char *gNativeNfcTdaProfileClassName;
+#if (NXP_EXTNS == TRUE)
+extern jmethodID gCachedNfcManagerNotifyTagAbortListeners;
+#endif
 }  // namespace android
