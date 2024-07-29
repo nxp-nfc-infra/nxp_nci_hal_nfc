@@ -190,7 +190,15 @@ void nativeNfcTag_doReadCompleted(tNFA_STATUS status) {
   DLOG_IF(INFO, nfc_debug_enabled)
       << StringPrintf("%s: status=0x%X; is reading=%u", __func__, status,
                       sIsReadingNdefMessage);
-
+#if (NXP_EXTNS == TRUE)
+  if (status == NFA_STATUS_TIMEOUT) {
+  tNFA_STATUS nfaStat = NFA_STATUS_OK;
+    nfaStat = NFA_Deactivate(FALSE);
+    if (nfaStat != NFA_STATUS_OK)
+      LOG(ERROR) << StringPrintf("%s: deactivate failed; error=0x%X", __func__,
+                                 nfaStat);
+  }
+#endif
   if (sIsReadingNdefMessage == false)
     return;  // not reading NDEF message right now, so just return
 
@@ -559,8 +567,10 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
 
   if (sCurrentConnectedTargetType == TARGET_TYPE_ISO14443_3A ||
       sCurrentConnectedTargetType == TARGET_TYPE_ISO14443_3B) {
-
+#if (NXP_EXTNS != TRUE)
       if (sCurrentConnectedTargetProtocol != NFC_PROTOCOL_MIFARE) {
+#endif
+      {
         DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
         "%s: switching to tech: %d need to switch rf intf to frame", __func__,
         sCurrentConnectedTargetType);
@@ -626,7 +636,12 @@ static int reSelect(tNFA_INTF_TYPE rfInterface, bool fSwitchIfNeeded) {
       {
         SyncEventGuard g3(sReconnectEvent);
 #if (NXP_EXTNS == TRUE)
-        if (nfcTagExtns.processNonStdTagOperation(
+        if ((sCurrentConnectedTargetProtocol == NFA_PROTOCOL_ISO_DEP) &&
+            (sCurrentConnectedTargetType  == TARGET_TYPE_ISO14443_3B)) {
+          status =
+              NFA_SendRawFrame(RW_DESELECT_REQ, sizeof(RW_DESELECT_REQ), 0);
+        }
+        else if (nfcTagExtns.processNonStdTagOperation(
                 TAG_API_REQUEST::TAG_RESELECT_API,
                 TAG_OPERATION::TAG_HALT_PICC_OPERATION) !=
             NfcTagExtns::TAG_STATUS_SUCCESS) {

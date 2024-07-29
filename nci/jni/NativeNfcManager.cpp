@@ -1465,6 +1465,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
       }
 
       if (reader_mode && !sReaderModeEnabled) {
+        if (nfcFL.chipType == pn7160) {
         sReaderModeEnabled = true;
         NFA_DisableListening();
 
@@ -1472,6 +1473,7 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
         nfcManager_configNfccConfigControl(false);
 
         NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+        }
       } else if (!reader_mode && sReaderModeEnabled) {
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
