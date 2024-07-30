@@ -13,7 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+ *
+ *  Copyright 2022-2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 #include <android-base/stringprintf.h>
 #include <base/logging.h>
 #include <errno.h>
@@ -114,6 +130,10 @@ uint8_t RW_DESELECT_REQ[] = {0xC2};
 static jboolean sWriteOk = JNI_FALSE;
 static jboolean sWriteWaitingForComplete = JNI_FALSE;
 static bool sFormatOk = false;
+static bool sIsCheckingNDef = false;
+#if (NXP_EXTNS == TRUE)
+static uint8_t Presence_check_TypeB[] = {0xB2};
+#endif
 static jboolean sConnectOk = JNI_FALSE;
 static jboolean sConnectWaitingForComplete = JNI_FALSE;
 static bool sGotDeactivate = false;
@@ -551,11 +571,28 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
     retCode = NFCSTATUS_FAILED;
     goto TheEnd;
   }
-
+#if (NXP_EXTNS == TRUE)
+  sCurrentConnectedHandle = targetHandle;
+  if (sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T3BT) {
+    goto TheEnd;
+  }
+#endif
   sCurrentConnectedTargetType = natTag.mTechList[i];
   sCurrentConnectedTargetProtocol = natTag.mTechLibNfcTypes[i];
   sCurrentConnectedHandle = targetHandle;
 
+#if (NXP_EXTNS == TRUE)
+  LOG(ERROR)<< StringPrintf("%s:  doConnect sCurrentConnectedTargetProtocol %x sCurrentConnectedTargetType %x",
+            __func__,sCurrentConnectedTargetProtocol,sCurrentConnectedTargetType);
+  natTag.mCurrentRequestedProtocol = sCurrentConnectedTargetProtocol;
+  NfcTagExtns::getInstance().setCurrentTargetType(sCurrentConnectedTargetType);
+  if(sCurrentConnectedTargetProtocol == NFC_PROTOCOL_T3BT) {
+    goto TheEnd;
+  }
+#endif
+  DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+        "%s: TargetType=%d, TargetProtocol=%d", __func__,
+        sCurrentConnectedTargetType, sCurrentConnectedTargetProtocol);
   if (sCurrentConnectedTargetProtocol != NFC_PROTOCOL_ISO_DEP &&
       sCurrentConnectedTargetProtocol != NFC_PROTOCOL_MIFARE) {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
@@ -1329,6 +1366,18 @@ static jint nativeNfcTag_doCheckNdef(JNIEnv* e, jobject o, jintArray ndefInfo) {
 
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: enter", __func__);
 
+  sIsCheckingNDef = true;
+#if (NXP_EXTNS == TRUE)
+  if (sCurrentConnectedTargetProtocol == NFA_PROTOCOL_T3BT) {
+    ndef = e->GetIntArrayElements(ndefInfo, 0);
+    ndef[0] = 0;
+    ndef[1] = NDEF_MODE_READ_ONLY;
+    e->ReleaseIntArrayElements(ndefInfo, ndef, 0);
+    sIsCheckingNDef = false;
+    return NFA_STATUS_FAILED;
+  }
+#endif
+
 #if (NXP_EXTNS == TRUE)
   if (NfcTagExtns::getInstance().processNonStdTagOperation(
           TAG_API_REQUEST::TAG_CHECK_NDEF_API, TAG_OPERATION::TAG_SKIP_NDEF) !=
@@ -1479,6 +1528,7 @@ static jboolean nativeNfcTag_doPresenceCheck(JNIEnv*, jobject) {
   DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s", __func__);
   tNFA_STATUS status = NFA_STATUS_OK;
   jboolean isPresent = JNI_FALSE;
+  int handle = sCurrentConnectedHandle;
 
   // Special case for Kovio.  The deactivation would have already occurred
   // but was ignored so that normal tag opertions could complete.  Now we
@@ -1521,6 +1571,59 @@ static jboolean nativeNfcTag_doPresenceCheck(JNIEnv*, jobject) {
         << StringPrintf("%s: tag already deactivated", __func__);
     return JNI_FALSE;
   }
+  #if (NXP_EXTNS == TRUE)
+  if (NfcTag::getInstance().mTechLibNfcTypes[handle] == NFA_PROTOCOL_T3BT) {
+    uint8_t* pbuf = NULL;
+    uint8_t bufLen = 0x00;
+    bool waitOk = false;
+    int timeout =
+        NfcTag::getInstance().getTransceiveTimeout(sCurrentConnectedTargetType);
+    DLOG_IF(INFO, nfc_debug_enabled)
+        << StringPrintf("%s: enter; timeout = %d", __func__, timeout);
+
+    SyncEventGuard g(sTransceiveEvent);
+    sTransceiveRfTimeout = false;
+    sWaitingForTransceive = true;
+    // sTransceiveDataLen = 0;
+    bufLen = (uint8_t)sizeof(Presence_check_TypeB);
+    pbuf = Presence_check_TypeB;
+    // memcpy(pbuf, Attrib_cmd_TypeB, bufLen);
+    status = NFA_SendRawFrame(pbuf, bufLen,
+                              NFA_DM_DEFAULT_PRESENCE_CHECK_START_DELAY);
+    if (status != NFA_STATUS_OK) {
+      LOG(ERROR) << StringPrintf("%s: fail send; error=%d", __func__, status);
+    } else
+      waitOk = sTransceiveEvent.wait(timeout);
+
+    if (waitOk == false || sTransceiveRfTimeout)  // if timeout occurred
+    {
+      return JNI_FALSE;
+      ;
+    } else {
+      return JNI_TRUE;
+    }
+  }
+  if(NfcTag::getInstance ().mTechLibNfcTypes[0] == NFA_PROTOCOL_T3BT) {
+    uint8_t T3btPresenceCheckCmd[] = {0xB2};
+    uint8_t bufLen = 0x00;
+    bool waitOk = false;
+
+    SyncEventGuard g (sTransceiveEvent);
+    sTransceiveRfTimeout = false;
+    sWaitingForTransceive = true;
+    bufLen = (uint8_t) sizeof(T3btPresenceCheckCmd);
+    status = NFA_SendRawFrame (T3btPresenceCheckCmd, bufLen, NFA_DM_DEFAULT_PRESENCE_CHECK_START_DELAY);
+    if (status != NFA_STATUS_OK) {
+      DLOG_IF(ERROR, nfc_debug_enabled) << StringPrintf("%s: fail send; error=%d", __func__, status);
+    } else
+      waitOk = sTransceiveEvent.wait (NfcTag::getInstance().getTransceiveTimeout(TARGET_TYPE_ISO14443_3B));
+    if (waitOk == false || sTransceiveRfTimeout) { //if timeout occurred
+      return JNI_FALSE;;
+    } else {
+      return JNI_TRUE;
+    }
+  }
+#endif
   {
     SyncEventGuard guard(sPresenceCheckEvent);
     status =

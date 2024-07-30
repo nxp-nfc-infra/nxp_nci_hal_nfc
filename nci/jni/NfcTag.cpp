@@ -13,7 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+ *
+ *  Copyright 2022-2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 /*
  *  Tag-reading, tag-writing operations.
  */
@@ -455,7 +471,17 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     mTechList[mNumTechList] =
         TARGET_TYPE_MIFARE_CLASSIC;  // is TagTechnology.MIFARE_CLASSIC by Java
                                      // API
-  } else {
+  }
+  else if (NFC_PROTOCOL_T3BT == rfDetail.protocol) {
+    mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
+    mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
+    mTechList[mNumTechList] =
+        TARGET_TYPE_ISO14443_3B;  // is TagTechnology.NFC_B by Java API
+    // save the stack's data structure for interpretation later
+    memcpy(&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param),
+           sizeof(rfDetail.rf_tech_param));
+  }
+  else {
     LOG(ERROR) << StringPrintf("%s: unknown protocol ????", fn);
     mTechList[mNumTechList] = TARGET_TYPE_UNKNOWN;
   }
@@ -1095,10 +1121,25 @@ void NfcTag::fillNativeNfcTagMembers5(JNIEnv* e, jclass tag_cls, jobject tag,
              NFC_DISCOVERY_TYPE_POLL_B_PRIME == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_B == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_B_PRIME == mTechParams[0].mode) {
+#if (NXP_EXTNS == TRUE)
+    if (activationData.activate_ntf.protocol != NFA_PROTOCOL_T3BT)
+#endif
+    {
     DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: tech B", fn);
     uid.reset(e->NewByteArray(NFC_NFCID0_MAX_LEN));
     e->SetByteArrayRegion(uid.get(), 0, NFC_NFCID0_MAX_LEN,
                           (jbyte*)&mTechParams[0].param.pb.nfcid0);
+    }
+#if (NXP_EXTNS == TRUE)
+    else {
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf("%s: chinaId card", fn);
+      DLOG_IF(INFO, nfc_debug_enabled) << StringPrintf(
+          "%s: pipi_id[0]=%x", fn, mTechParams[0].param.pb.pupiid[0]);
+      uid.reset(e->NewByteArray(NFC_PUPIID_MAX_LEN));
+      e->SetByteArrayRegion(uid.get(), 0, NFC_PUPIID_MAX_LEN,
+                            (jbyte*)&mTechParams[0].param.pb.pupiid);
+    }
+#endif
   } else if (NFC_DISCOVERY_TYPE_POLL_F == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_POLL_F_ACTIVE == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_F == mTechParams[0].mode ||
