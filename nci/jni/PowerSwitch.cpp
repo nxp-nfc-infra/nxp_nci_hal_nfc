@@ -78,7 +78,8 @@ PowerSwitch::PowerSwitch()
       mCurrDeviceMgtPowerState(NFA_DM_PWR_STATE_UNKNOWN),
       mExpectedDeviceMgtPowerState(NFA_DM_PWR_STATE_UNKNOWN),
       mDesiredScreenOffPowerState(0),
-      mCurrActivity(0) {}
+      mCurrActivity(0),
+      mCurrentConfigLen(0) {}
 
 /*******************************************************************************
 **
