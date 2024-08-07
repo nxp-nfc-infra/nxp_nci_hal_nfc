@@ -1423,7 +1423,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         @Override
         public boolean enable() throws RemoteException {
             NfcPermissions.enforceAdminPermissions(mContext);
-
+            if (NxpDiscoveryMode.EMVCO ==
+                mProfileDiscovery.getCurrentDiscoveryMode()) {
+              mProfileDiscovery.setEMVCoMode(0, false);
+            }
             saveNfcOnSetting(true);
 
             if (shouldEnableNfc()) {
