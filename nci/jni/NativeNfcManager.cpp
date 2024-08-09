@@ -709,7 +709,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
     case NFA_T4TNFCEE_READ_CPLT_EVT:
     case NFA_T4TNFCEE_WRITE_CPLT_EVT:
     case NFA_T4TNFCEE_CLEAR_CPLT_EVT:
+    if (nfcFL.chipType == pn7160) {
       t4tNfcEe.eventHandler(connEvent, eventData);
+    }
       break;
     #endif
 
@@ -1239,7 +1241,6 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
 #if (NXP_EXTNS == TRUE)
   tNFA_MW_VERSION mwVer;
-  tNFC_chipType chipType;
 #endif
   initializeGlobalDebugEnabledFlag();
   tNFA_STATUS stat = NFA_STATUS_OK;
@@ -1253,14 +1254,14 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
     goto TheEnd;
   }
 #if (NXP_EXTNS == TRUE)
-    chipType = NFA_GetChipVersion();
+    gChipType = NFA_GetChipVersion();
     DLOG_IF(INFO, true) << StringPrintf(
-        "%s:  NFA_GetChipVersion : chipType = %u", __func__,chipType);
-    mwVer=  NFA_GetMwVersion();
+        "%s: NFA_GetChipVersion : gChipType = %u", __func__, gChipType);
+    mwVer = NFA_GetMwVersion();
     DLOG_IF(INFO, true) << StringPrintf(
         "%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x", __func__,
-        mwVer.validation, mwVer.android_version,
-        mwVer.major_version, mwVer.minor_version);
+        mwVer.validation, mwVer.android_version, mwVer.major_version,
+        mwVer.minor_version);
 #endif
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
 

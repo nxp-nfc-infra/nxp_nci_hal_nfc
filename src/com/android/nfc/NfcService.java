@@ -4029,10 +4029,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     }
 
     public void addT4TNfceeAid() {
-      Log.i(TAG, "Add T4T Nfcee AID");
-      routeAids(T4T_NFCEE_AID, ROUTE_ID_T4T_NFCEE,
-              AID_MATCHING_EXACT_ONLY,
-              GetT4TNfceePowerState());
+    NfcChipType chipType = mDeviceHost.getChipType();
+    Log.i(TAG, "addT4TNfceeAid chipType "+ mDeviceHost.getChipType());
+        if (chipType == NfcChipType.PN7160)
+        {
+          routeAids(T4T_NFCEE_AID, ROUTE_ID_T4T_NFCEE,
+                  AID_MATCHING_EXACT_ONLY,
+                  GetT4TNfceePowerState());
+        }
     }
     /**
      * Dump debugging information as a NfcServiceDumpProto
