@@ -12,7 +12,7 @@ AOSP NFC Service code with JNI API’s Along with NXP feature extensions
 | Android Version        | NXP Release          | NXP Tag  |
 | :-------------: |:---------------------:| :-----:|
 | android-14.0.0_r4              |  14.02.00 (PN7xxx) |  NFC_AR_INFRA_001E_14.02.00_OpnSrc |
-
+| android-14.0.0_r4              |  14.03.00 (PN7xxx) |  NFC_AR_INFRA_001E_14.03.00_OpnSrc |
 
 
 
