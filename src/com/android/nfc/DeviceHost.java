@@ -240,4 +240,8 @@ public interface DeviceHost {
     NfcVendorNciResponse sendRawVendorCmd(int mt, int gid, int oid, byte[] payload);
 
     void enableVendorNciNotifications(boolean enabled);
+    /**
+     * returns the controller chip type
+     */
+    public NfcChipType getChipType();
 }

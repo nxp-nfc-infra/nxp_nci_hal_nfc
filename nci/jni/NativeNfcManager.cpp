@@ -44,6 +44,9 @@
 #include "nfc_brcm_defs.h"
 #include "nfc_config.h"
 #include "rw_api.h"
+#if (NXP_EXTNS == TRUE)
+#include "Nxp_Features.h"
+#endif
 
 using android::base::StringPrintf;
 
@@ -86,6 +89,9 @@ SyncEvent sNfaSetPowerSubState;
 int recovery_option = 0;
 int always_on_nfcee_power_and_link_conf = 0;
 int disable_always_on_nfcee_power_and_link_conf = 0;
+#if (NXP_EXTNS == TRUE)
+tNFC_chipType gChipType;
+#endif
 
 namespace android {
 jmethodID gCachedNfcManagerNotifyNdefMessageListeners;
@@ -101,6 +107,9 @@ jmethodID gCachedNfcManagerNotifyPollingLoopFrame;
 jmethodID gCachedNfcManagerNotifyWlcStopped;
 jmethodID gCachedNfcManagerNotifyVendorSpecificEvent;
 jmethodID gCachedNfcManagerNotifyCommandTimeout;
+#if (NXP_EXTNS == TRUE)
+jobjectArray gCachedNfcChipTypeValues = NULL;
+#endif
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
     "com/android/nfc/dhimpl/NativeNfcManager";
@@ -565,7 +574,17 @@ static void nfaConnectionCallback(uint8_t connEvent,
       break;
   }
 }
+#if (NXP_EXTNS == TRUE)
+static void initializeChipTypeStruc(JNIEnv* env) {
+  jclass nfcChipTypeClass = env->FindClass("com/android/nfc/NfcChipType");
 
+  jmethodID nfcChipTypeValuesMethod = env->GetStaticMethodID(
+      nfcChipTypeClass, "values", "()[Lcom/android/nfc/NfcChipType;");
+  jobjectArray nfcChipTypeValues = (jobjectArray)env->CallStaticObjectMethod(
+      nfcChipTypeClass, nfcChipTypeValuesMethod);
+  gCachedNfcChipTypeValues = (jobjectArray)env->NewGlobalRef(nfcChipTypeValues);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        nfcManager_initNativeStruc
@@ -582,6 +601,9 @@ static jboolean nfcManager_initNativeStruc(JNIEnv* e, jobject o) {
   initializeRecoveryOption();
   initializeNfceePowerAndLinkConf();
   initializeDisableAlwaysOnNfceePowerAndLinkConf();
+#if (NXP_EXTNS == TRUE)
+  initializeChipTypeStruc(e);
+#endif
   LOG(DEBUG) << StringPrintf("%s: enter", __func__);
 
   nfc_jni_native_data* nat =
@@ -1243,6 +1265,9 @@ static jint nfcManager_getLfT3tMax(JNIEnv*, jobject) {
 **
 *******************************************************************************/
 static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
+#if (NXP_EXTNS == TRUE)
+  tNFA_MW_VERSION mwVer;
+#endif
   initializeGlobalDebugEnabledFlag();
   tNFA_STATUS stat = NFA_STATUS_OK;
   sIsRecovering = false;
@@ -1253,7 +1278,15 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
     LOG(DEBUG) << StringPrintf("%s: already enabled", __func__);
     goto TheEnd;
   }
-
+#if (NXP_EXTNS == TRUE)
+  gChipType = NFA_GetChipVersion();
+  LOG(INFO) << StringPrintf("%s: NFA_GetChipVersion : gChipType = %u", __func__,
+                            gChipType);
+  mwVer = NFA_GetMwVersion();
+  LOG(INFO) << StringPrintf("%s:  MW Version: NFC_AR_INFRA_%04X_%02d.%02x.%02x",
+                            __func__, mwVer.validation, mwVer.android_version,
+                            mwVer.major_version, mwVer.minor_version);
+#endif
   powerSwitch.initialize(PowerSwitch::FULL_POWER);
 
   {
@@ -1999,6 +2032,27 @@ static jbyteArray nfcManager_doGetRoutingTable(JNIEnv* e, jobject o) {
 
   return rtJavaArray;
 }
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        nfcManager_getChipType
+**
+** Description:     returns the controller chip type
+**
+** Parameter:       void
+**
+** Returns:         Returns chip type of the controller, if it is configured
+**                  properly, otherwise returns default chip type value
+*(PN7220).
+**
+**
+*******************************************************************************/
+jobject nfcManager_getChipType(JNIEnv* env, jobject obj) {
+  jobject chipTypeObj =
+      env->GetObjectArrayElement(gCachedNfcChipTypeValues, (int)gChipType);
+  return chipTypeObj;
+}
+#endif
 
 static void nfcManager_clearRoutingEntry(JNIEnv* e, jobject o,
                                          jint clearFlags) {
@@ -2267,6 +2321,10 @@ static JNINativeMethod gMethods[] = {
     {"getProprietaryCaps", "()[B", (void*)nfcManager_getProprietaryCaps},
     {"enableVendorNciNotifications", "(Z)V",
      (void*)ncfManager_nativeEnableVendorNciNotifications},
+#if (NXP_EXTNS == TRUE)
+    {"getChipType", "()Lcom/android/nfc/NfcChipType;",
+     (void*)nfcManager_getChipType},
+#endif
 };
 
 /*******************************************************************************

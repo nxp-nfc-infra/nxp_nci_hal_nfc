@@ -29,6 +29,7 @@ import android.os.Trace;
 import android.util.Log;
 
 import com.android.nfc.DeviceHost;
+import com.android.nfc.NfcChipType;
 import com.android.nfc.NfcDiscoveryParameters;
 import com.android.nfc.NfcService;
 import com.android.nfc.NfcStatsLog;
@@ -351,6 +352,9 @@ public class NativeNfcManager implements DeviceHost {
 
     @Override
     public native int getMaxRoutingTableSize();
+
+    @Override
+    public native NfcChipType getChipType();
 
     public native boolean isMultiTag();
 
