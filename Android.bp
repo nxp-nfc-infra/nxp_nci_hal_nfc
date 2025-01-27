@@ -78,42 +78,42 @@ android_app {
     ],
 }
 
-// NCI Configuration embedded in NFC apex.
-// This version compiles against SDK API's.
-android_app {
-    name: "NfcNciApex",
-    defaults: ["NfcNciDefaults"],
-    min_sdk_version: "current",
-    sdk_version: "module_current",
-    certificate: "nfc",
-    srcs: [
-        ":nfc-sources",
-        "shim_src/apex/**/*.java",
-    ],
-    libs: [
-        "framework-annotations-lib",
-        "framework-bluetooth",
-        "framework-configinfrastructure",
-        "framework-nfc.impl",
-        "framework-permission-s",
-        "framework-permission",
-        "framework-statsd.stubs.module_lib",
-        "framework-wifi",
-        "android.nfc.flags-aconfig-java",
-        "android.permission.flags-aconfig-java-export",
-        "android.service.chooser.flags-aconfig-java",
-        "unsupportedappusage",
-    ],
-    // prevent NfcNciApex from using product-specific resources
-    aaptflags: ["--product default"],
-    apex_available: [
-        "//apex_available:platform",
-        "com.android.nfcservices",
-    ],
-    lint: {
-        baseline_filename: "lint-baseline.xml",
-    },
-}
+//// NCI Configuration embedded in NFC apex.
+//// This version compiles against SDK API's.
+//android_app {
+//    name: "NfcNciApex",
+//    defaults: ["NfcNciDefaults"],
+//   min_sdk_version: "current",
+//    sdk_version: "module_current",
+//    certificate: "nfc",
+//    srcs: [
+//        ":nfc-sources",
+//        "shim_src/apex/**/*.java",
+//    ],
+//    libs: [
+//        "framework-annotations-lib",
+//        "framework-bluetooth",
+//        "framework-configinfrastructure",
+//        "framework-nfc.impl",
+//        "framework-permission-s",
+//        "framework-permission",
+//        "framework-statsd.stubs.module_lib",
+//        "framework-wifi",
+//        "android.nfc.flags-aconfig-java",
+//        "android.permission.flags-aconfig-java-export",
+//        "android.service.chooser.flags-aconfig-java",
+//        "unsupportedappusage",
+//    ],
+//    // prevent NfcNciApex from using product-specific resources
+//    aaptflags: ["--product default"],
+//    apex_available: [
+//        "//apex_available:platform",
+//        "com.android.nfcservices",
+//    ],
+//    lint: {
+//        baseline_filename: "lint-baseline.xml",
+//    },
+//}
 
 filegroup {
     name: "nfc-sources",

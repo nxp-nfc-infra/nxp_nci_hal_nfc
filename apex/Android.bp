@@ -43,7 +43,7 @@ soong_config_module_type {
 custom_apex {
     name: "com.android.nfcservices",
     manifest: "manifest.json",
-    apps: ["NfcNciApex"],
+   // apps: ["NfcNciApex"],
     multilib: {
         first: {
             // Extractor process runs only with the primary ABI.
