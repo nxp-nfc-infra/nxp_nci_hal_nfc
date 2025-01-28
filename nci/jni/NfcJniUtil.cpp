@@ -24,6 +24,7 @@
 #include <nativehelper/ScopedLocalRef.h>
 
 #include "NativeWlcManager.h"
+#include "PowerSwitch.h"
 #include "RoutingManager.h"
 
 using android::base::StringPrintf;
@@ -56,6 +57,7 @@ jint JNI_OnLoad(JavaVM* jvm, void*) {
 #if (NXP_EXTNS == TRUE)
   if (android::register_com_android_nfc_NativeT4tNfcee(e) == -1) return JNI_ERR;
   if (android::register_com_android_nfc_NativeNfcTda(e) == -1) return JNI_ERR;
+  if (PowerSwitch::getInstance().initializeJNIElements(e) == -1) return JNI_ERR;
 #endif
   if (NativeWlcManager::getInstance().registerJniFunctions(e) == -1)
     return JNI_ERR;

@@ -128,6 +128,7 @@ import com.nxp.nfc.INxpNfcTDA;
 import com.nxp.nfc.NfcConstants;
 import com.nxp.nfc.NfcTDAInfo;
 import com.nxp.nfc.TdaResult;
+import com.nxp.nfc.DynamicPowerResult;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
@@ -243,6 +244,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_OPEN_TDA = 25;
     static final int MSG_TRANSCEIVE_TDA = 26;
     static final int MSG_CLOSE_TDA = 27;
+    static final int MSG_SET_POWER_CONFIG = 28;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -503,6 +505,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     public static final int T4TNFCEE_STATUS_FAILED = -1;
     private Object mT4tNfcEeObj = new Object();
     private Bundle mT4tNfceeReturnBundle = new Bundle();
+    private Bundle mDynamicPowerResultBundle = new Bundle();
 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
@@ -2840,6 +2843,23 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
           return readData;
         }
 
+        @Override
+        public DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig) {
+          NfcPermissions.enforceUserPermissions(mContext);
+          Bundle writeBundle = new Bundle();
+          writeBundle.putByteArray("pwrConfig", pwrConfig);
+          try {
+            sendMessage(NfcService.MSG_SET_POWER_CONFIG, writeBundle);
+            synchronized (mT4tNfcEeObj) { mT4tNfcEeObj.wait(1000); }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+          DynamicPowerResult DynamicPowerResult =
+              mDynamicPowerResultBundle.getParcelable("DynamicPowerResult");
+          mDynamicPowerResultBundle.clear();
+          return DynamicPowerResult;
+        }
+
     }
 
     final class NxpNfcTdaProfile extends INxpNfcTDA.Stub {
@@ -4260,6 +4280,16 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                   mCloseTdaBundle.clear();
                   mCloseTdaBundle.putByte("status", status);
                   synchronized (mCloseTdaObj) { mCloseTdaObj.notify(); }
+                  break;
+                }
+                case MSG_SET_POWER_CONFIG: {
+                  Bundle mPwrConfigBundle = (Bundle)msg.obj;
+                  byte[] pwrConfig = mPwrConfigBundle.getByteArray("pwrConfig");
+                  DynamicPowerResult DynamicPowerResult =
+                      mDeviceHost.setDynamicPowerConfig(pwrConfig);
+                  mDynamicPowerResultBundle.putParcelable("DynamicPowerResult",
+                                                          DynamicPowerResult);
+                  synchronized (mT4tNfcEeObj) { mT4tNfcEeObj.notify(); }
                   break;
                 }
                 default:

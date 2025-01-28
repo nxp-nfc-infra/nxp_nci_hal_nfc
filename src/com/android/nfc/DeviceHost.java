@@ -38,6 +38,7 @@ import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
+import com.nxp.nfc.DynamicPowerResult;
 import com.nxp.nfc.NfcTDAInfo;
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -282,4 +283,8 @@ public interface DeviceHost {
      * returns the controller chip type
      */
     public NfcChipType getChipType();
+    /**
+     * Sets the power configuration to the controller
+     */
+    DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig);
 }

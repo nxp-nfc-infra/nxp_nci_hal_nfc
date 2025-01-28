@@ -36,6 +36,7 @@ import com.android.nfc.NfcStatsLog;
 import com.android.nfc.NfcVendorNciResponse;
 import com.android.nfc.NfcProprietaryCaps;
 import com.nxp.nfc.NfcTDAInfo;
+import com.nxp.nfc.DynamicPowerResult;
 import java.io.FileDescriptor;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -414,6 +415,9 @@ public class NativeNfcManager implements DeviceHost {
     public byte[] transceive(byte[] in_data) {
       return mTdaMgr.transceive(in_data);
     }
+
+    @Override
+    public native DynamicPowerResult setDynamicPowerConfig(byte[] pwrConfig);
 
     @Override
     public byte closeTDA(byte tdaID, boolean standBy) {
