@@ -34,4 +34,5 @@ extern jmethodID gCachedNfcManagerNotifyWlcStopped;
 extern const char* gNativeNfcTagClassName;
 extern const char* gNativeNfcManagerClassName;
 extern const char* gNativeT4tNfceeClassName;
+extern const char* gNativeNfcTdaProfileClassName;
 }  // namespace android

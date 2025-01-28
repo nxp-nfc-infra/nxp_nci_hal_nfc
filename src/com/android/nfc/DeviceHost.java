@@ -38,7 +38,7 @@ import android.annotation.Nullable;
 import android.nfc.NdefMessage;
 import android.nfc.cardemulation.PollingFrame;
 import android.os.Bundle;
-
+import com.nxp.nfc.NfcTDAInfo;
 import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.List;
@@ -222,6 +222,14 @@ public interface DeviceHost {
     * Get the committed listen mode routing configuration
     */
     byte[] getRoutingTable();
+
+    public NfcTDAInfo[] discoverTDA();
+
+    public byte openTDA(byte tdaID, boolean standBy);
+
+    public byte[] transceive(byte[] in_cmd_data);
+
+    public byte closeTDA(byte tdaID, boolean standBy);
 
     /**
     * Get the Max Routing Table size from cache

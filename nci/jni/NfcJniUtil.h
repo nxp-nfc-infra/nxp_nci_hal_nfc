@@ -147,5 +147,6 @@ int register_com_android_nfc_NativeNfcManager(JNIEnv* e);
 int register_com_android_nfc_NativeNfcTag(JNIEnv* e);
 #if (NXP_EXTNS == TRUE)
 int register_com_android_nfc_NativeT4tNfcee(JNIEnv* e);
+int register_com_android_nfc_NativeNfcTda(JNIEnv* e);
 #endif
 }  // namespace android
