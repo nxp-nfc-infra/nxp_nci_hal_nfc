@@ -61,7 +61,11 @@ android_app {
         ":nfc-sources",
         "shim_src/non_apex/**/*.java",
     ],
+    uses_libs: [
+        "com.nxp.nfc",
+    ],
     libs: [
+        "com.nxp.nfc",
         // order matters: classes in framework-nfc are resolved before framework, meaning
         // @hide APIs in framework-nfc are resolved before @SystemApi stubs in framework
         "framework-nfc.impl",

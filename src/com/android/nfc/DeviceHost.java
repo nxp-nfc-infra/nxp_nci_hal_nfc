@@ -13,7 +13,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+ *
+ *  The original Work has been changed by NXP.
+ *
+ *  Copyright 2024-2025 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 package com.android.nfc;
 
 import android.annotation.Nullable;
@@ -160,6 +178,8 @@ public interface DeviceHost {
 
     public int getLfT3tMax();
 
+    public int getT4TNfceePowerState();
+
     public void resetTimeouts();
 
     public boolean setTimeout(int technology, int timeout);
@@ -228,6 +248,16 @@ public interface DeviceHost {
     void setIsoDepProtocolRoute(int route);
     void setTechnologyABRoute(int route);
     void clearRoutingEntry(int clearFlags);
+
+    public int doWriteT4tData(byte[] fileId, byte[] data, int length);
+
+    public byte[] doReadT4tData(byte[] fileId);
+
+    public boolean doLockT4tData(boolean lock);
+
+    public boolean isLockedT4tData();
+
+    public boolean doClearNdefT4tData();
 
     /**
     * Set NFCC discovery technology for polling and listening

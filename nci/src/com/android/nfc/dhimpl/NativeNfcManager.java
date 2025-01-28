@@ -56,6 +56,8 @@ public class NativeNfcManager implements DeviceHost {
     private int mIsoDepMaxTransceiveLength;
     private final DeviceHostListener mListener;
     private final Context mContext;
+    private final NativeT4tNfceeManager mT4tNfceeMgr;
+
 
     private final Object mLock = new Object();
     private final HashMap<Integer, byte[]> mT3tIdentifiers = new HashMap<Integer, byte[]>();
@@ -80,6 +82,7 @@ public class NativeNfcManager implements DeviceHost {
         loadLibrary();
         initializeNativeStructure();
         mContext = context;
+        mT4tNfceeMgr = new NativeT4tNfceeManager();
     }
 
     public native boolean initializeNativeStructure();
@@ -116,6 +119,9 @@ public class NativeNfcManager implements DeviceHost {
     }
 
     private native void doDisableDtaMode();
+
+   @Override
+    public native int   getT4TNfceePowerState();
 
     @Override
     public void disableDtaMode() {
@@ -331,6 +337,31 @@ public class NativeNfcManager implements DeviceHost {
     @Override
     public boolean setNfcSecure(boolean enable) {
         return doSetNfcSecure(enable);
+    }
+
+    @Override
+    public int doWriteT4tData(byte[] fileId, byte[] data, int length) {
+      return mT4tNfceeMgr.doWriteT4tData(fileId, data, length);
+    }
+
+    @Override
+    public byte[] doReadT4tData(byte[] fileId) {
+      return mT4tNfceeMgr.doReadT4tData(fileId);
+    }
+
+    @Override
+    public boolean doLockT4tData(boolean lock) {
+      return mT4tNfceeMgr.doLockT4tData(lock);
+    }
+
+    @Override
+    public boolean isLockedT4tData() {
+      return mT4tNfceeMgr.isLockedT4tData();
+    }
+
+    @Override
+    public boolean doClearNdefT4tData() {
+      return mT4tNfceeMgr.doClearNdefT4tData();
     }
 
     private native void doStartStopPolling(boolean start);

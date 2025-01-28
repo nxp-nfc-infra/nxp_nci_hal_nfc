@@ -55,6 +55,10 @@ class RoutingManager {
   static const int CLEAR_AID_ENTRIES = 0x01;
   static const int CLEAR_PROTOCOL_ENTRIES = 0x02;
   static const int CLEAR_TECHNOLOGY_ENTRIES = 0x04;
+#if (NXP_EXTNS == TRUE)
+  static const int PWR_SWTCH_OFF_MASK = 0x02;
+  static const int PWR_BATT_OFF_MASK = 0x04;
+#endif
 
  private:
   RoutingManager();

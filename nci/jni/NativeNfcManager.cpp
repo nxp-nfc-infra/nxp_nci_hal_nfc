@@ -45,7 +45,9 @@
 #include "nfc_config.h"
 #include "rw_api.h"
 #if (NXP_EXTNS == TRUE)
+#include "NativeT4tNfcee.h"
 #include "Nxp_Features.h"
+#include "nfa_nfcee_int.h"
 #endif
 
 using android::base::StringPrintf;
@@ -54,6 +56,8 @@ extern tNFA_DM_DISC_FREQ_CFG* p_nfa_dm_rf_disc_freq_cfg;  // defined in stack
 namespace android {
 extern bool gIsTagDeactivating;
 extern bool gIsSelectingRfInterface;
+const char* gNativeT4tNfceeClassName =
+    "com/android/nfc/dhimpl/NativeT4tNfceeManager";
 extern void nativeNfcTag_doTransceiveStatus(tNFA_STATUS status, uint8_t* buf,
                                             uint32_t buflen);
 extern void nativeNfcTag_notifyRfTimeout();
@@ -568,6 +572,15 @@ static void nfaConnectionCallback(uint8_t connEvent,
           eventData->status);
       break;
 
+#if (NXP_EXTNS == TRUE)
+    case NFA_T4TNFCEE_EVT:
+    case NFA_T4TNFCEE_READ_CPLT_EVT:
+    case NFA_T4TNFCEE_WRITE_CPLT_EVT:
+    case NFA_T4TNFCEE_CLEAR_CPLT_EVT:
+      t4tNfcEe.eventHandler(connEvent, eventData);
+      break;
+#endif
+
     default:
       LOG(DEBUG) << StringPrintf("%s: unknown event (%d) ????", __func__,
                                  connEvent);
@@ -931,6 +944,13 @@ static jboolean nfcManager_routeAid(JNIEnv* e, jobject, jbyteArray aid,
   ScopedByteArrayRO bytes(e, aid);
   buf = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&bytes[0]));
   bufLen = bytes.size();
+#if (NXP_EXTNS == TRUE)
+  LOG(INFO) << StringPrintf("%s: check and update AID 1", __func__);
+  NativeT4tNfcee::getInstance().checkAndUpdateT4TAid(buf, (uint8_t*)&bufLen);
+
+  RoutingManager::getInstance().removeAidRouting(buf, bufLen);
+  LOG(INFO) << StringPrintf("%s: check and update AID 2", __func__);
+#endif
   return RoutingManager::getInstance().addAidRouting(buf, bufLen, route,
                                                      aidInfo, power);
 }
@@ -2012,6 +2032,27 @@ static jint nfcManager_doGetMaxRoutingTableSize(JNIEnv* e, jobject o) {
 
 /*******************************************************************************
 **
+** Function:        nfcManager_getT4TNfceePowerState
+**
+** Description:     Get the T4T Nfcee power state supported.
+**                  e: JVM environment.
+**                  o: Java object.
+**                  mode: Not used.
+**
+** Returns:         None
+**
+*******************************************************************************/
+static jint nfcManager_getT4TNfceePowerState(JNIEnv* e, jobject o) {
+  RoutingManager& routingManager = RoutingManager::getInstance();
+  int defaultPowerState =
+      ~(routingManager.PWR_SWTCH_OFF_MASK | routingManager.PWR_BATT_OFF_MASK);
+
+  return NfcConfig::getUnsigned(NAME_DEFAULT_T4TNFCEE_AID_POWER_STATE,
+                                defaultPowerState);
+}
+
+/*******************************************************************************
+**
 ** Function:        nfcManager_doGetRoutingTable
 **
 ** Description:     Retrieve the committed listen mode routing configuration
@@ -2322,6 +2363,7 @@ static JNINativeMethod gMethods[] = {
     {"enableVendorNciNotifications", "(Z)V",
      (void*)ncfManager_nativeEnableVendorNciNotifications},
 #if (NXP_EXTNS == TRUE)
+    {"getT4TNfceePowerState", "()I", (void*)nfcManager_getT4TNfceePowerState},
     {"getChipType", "()Lcom/android/nfc/NfcChipType;",
      (void*)nfcManager_getChipType},
 #endif
@@ -2563,6 +2605,35 @@ static jbyteArray nfcManager_getProprietaryCaps(JNIEnv* e, jobject o) {
   CHECK(rtJavaArray);
   e->SetByteArrayRegion(rtJavaArray, 0, gCaps.size(), (jbyte*)gCaps.data());
   return rtJavaArray;
+}
+
+/*******************************************************************************
+ **
+ ** Function:        getConfig
+ **
+ ** Description:     read the config values from NFC controller.
+ **
+ ** Returns:         SUCCESS/FAILURE
+ **
+ *******************************************************************************/
+tNFA_STATUS getConfig(uint16_t* rspLen, uint8_t* configValue, uint8_t numParam,
+                      tNFA_PMID* param) {
+  tNFA_STATUS status = NFA_STATUS_FAILED;
+  if (rspLen == NULL || configValue == NULL || param == NULL)
+    return NFA_STATUS_FAILED;
+  SyncEventGuard guard(gNfaGetConfigEvent);
+  status = NFA_GetConfig(numParam, param);
+  if (status == NFA_STATUS_OK) {
+    if (gNfaGetConfigEvent.wait(2000) == false) {
+      *rspLen = 0;
+    } else {
+      *rspLen = gCurrentConfigLen;
+      memcpy(configValue, gConfig, gCurrentConfigLen);
+    }
+  } else {
+    *rspLen = 0;
+  }
+  return status;
 }
 
 } /* namespace android */

@@ -53,6 +53,9 @@ jint JNI_OnLoad(JavaVM* jvm, void*) {
   if (android::register_com_android_nfc_NativeNfcTag(e) == -1) return JNI_ERR;
   if (RoutingManager::getInstance().registerJniFunctions(e) == -1)
     return JNI_ERR;
+#if (NXP_EXTNS == TRUE)
+  if (android::register_com_android_nfc_NativeT4tNfcee(e) == -1) return JNI_ERR;
+#endif
   if (NativeWlcManager::getInstance().registerJniFunctions(e) == -1)
     return JNI_ERR;
   LOG(DEBUG) << StringPrintf("%s: exit", __func__);

@@ -19,6 +19,9 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <sys/queue.h>
+#if (NXP_EXTNS == TRUE)
+#include "Nxp_Features.h"
+#endif
 
 /* Discovery modes -- keep in sync with NFCManager.DISCOVERY_MODE_* */
 #define DISCOVERY_MODE_TAG_READER 0
@@ -142,4 +145,7 @@ int nfc_jni_get_nfc_socket_handle(JNIEnv* e, jobject o);
 struct nfc_jni_native_data* nfc_jni_get_nat(JNIEnv* e, jobject o);
 int register_com_android_nfc_NativeNfcManager(JNIEnv* e);
 int register_com_android_nfc_NativeNfcTag(JNIEnv* e);
+#if (NXP_EXTNS == TRUE)
+int register_com_android_nfc_NativeT4tNfcee(JNIEnv* e);
+#endif
 }  // namespace android
