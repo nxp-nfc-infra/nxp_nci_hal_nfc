@@ -1388,7 +1388,9 @@ static jboolean nfcManager_doInitialize(JNIEnv* e, jobject o) {
         prevScreenState = NFA_SCREEN_STATE_OFF_LOCKED;
 
         // Do custom NFCA startup configuration.
+#if (NXP_EXTNS != TRUE)
         doStartupConfig();
+#endif
 #ifdef DTA_ENABLED
         NfcDta::getInstance().setNfccConfigParams();
 #endif /* DTA_ENABLED */
@@ -1513,10 +1515,16 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
         NFA_EnableListening();
-
+#if (NXP_EXTNS == TRUE)
+        if (nfcFL.chipType == pn7160) {
+          // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF
+          // configuration.
+          nfcManager_configNfccConfigControl(true);
+        }
+#else
         // configure NFCC_CONFIG_CONTROL- NFCC allowed to manage RF configuration.
         nfcManager_configNfccConfigControl(true);
-
+#endif
         if (nat) {
           NFA_SetRfDiscoveryDuration(nat->discovery_duration);
         } else {
