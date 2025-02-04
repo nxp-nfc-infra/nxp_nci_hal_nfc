@@ -62,6 +62,8 @@ public interface DeviceHost {
 
         public void onEeUpdated();
 
+        public void onNfcHalBinderDied();
+
         public void onHwErrorReported();
 
         public void onPollingLoopDetected(List<PollingFrame> pollingFrames);

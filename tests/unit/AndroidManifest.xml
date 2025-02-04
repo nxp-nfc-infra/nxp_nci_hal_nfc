@@ -28,6 +28,9 @@
         <uses-library android:name="com.nxp.nfc"
             android:required="true"
         />
+        <uses-library android:name="com.nxp.emvco"
+            android:required="true"
+        />
         <uses-library android:name="android.test.runner" />
         <activity
             android:name="com.android.nfc.cardemulation.AppChooserActivity"

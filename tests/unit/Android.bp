@@ -15,6 +15,7 @@ android_test {
         "framework-nfc.impl",
         "unsupportedappusage",
         "com.nxp.nfc",
+        "com.nxp.emvco",
     ],
 
     static_libs: [
@@ -48,7 +49,9 @@ android_test {
         ":framework-nfc-updatable-sources",
         ":nfc-sources",
     ],
-    uses_libs: ["com.nxp.nfc"],
+    uses_libs: ["com.nxp.nfc",
+                "com.nxp.emvco",
+    ],
 
     platform_apis: true,
 

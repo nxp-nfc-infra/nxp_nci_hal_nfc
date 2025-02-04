@@ -63,9 +63,11 @@ android_app {
     ],
     uses_libs: [
         "com.nxp.nfc",
+        "com.nxp.emvco",
     ],
     libs: [
         "com.nxp.nfc",
+        "com.nxp.emvco",
         // order matters: classes in framework-nfc are resolved before framework, meaning
         // @hide APIs in framework-nfc are resolved before @SystemApi stubs in framework
         "framework-nfc.impl",

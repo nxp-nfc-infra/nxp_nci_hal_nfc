@@ -129,6 +129,8 @@ import com.nxp.nfc.NfcConstants;
 import com.nxp.nfc.NfcTDAInfo;
 import com.nxp.nfc.TdaResult;
 import com.nxp.nfc.DynamicPowerResult;
+import com.nxp.emvco.INxpNfcStateChangeRequestCallback;
+import com.nxp.emvco.NxpProfileDiscovery;
 import com.android.nfc.cardemulation.CardEmulationManager;
 import com.android.nfc.cardemulation.util.StatsdUtils;
 import com.android.nfc.dhimpl.NativeNfcManager;
@@ -172,6 +174,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import vendor.nxp.emvco.NxpDiscoveryMode;
 
 public class NfcService implements DeviceHostListener, ForegroundUtils.Callback {
     static final boolean DBG = NfcProperties.debug_enabled().orElse(true);
@@ -245,6 +248,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int MSG_TRANSCEIVE_TDA = 26;
     static final int MSG_CLOSE_TDA = 27;
     static final int MSG_SET_POWER_CONFIG = 28;
+    static final int MSG_NFC_HAL_DIED = 29;
 
     // Negative value for NO polling delay
     static final int NO_POLL_DELAY = -1;
@@ -262,9 +266,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     static final int TASK_DISABLE_ALWAYS_ON = 5;
 
     // Static TDA ID
-    static final int CT_CID = 0x0A;
     static final int SAM1_CID = 0x0B;
     static final int SAM2_CID = 0x0C;
+    static final byte INVALID_CID = (byte)0xFF;
+    static final byte CT_NFCEE_ID = 0x20;
 
     // Polling technology masks
     static final int NFC_POLL_A = 0x01;
@@ -497,6 +502,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private static boolean sToast_debounce = false;
     private static int sToast_debounce_time_ms = 3000;
     public  static boolean sIsDtaMode = false;
+    private static boolean sIsNFCBinderDied = false;
 
     boolean mIsVrModeEnabled;
 
@@ -510,6 +516,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private final boolean mIsAlwaysOnSupported;
     private final Set<INfcControllerAlwaysOnListener> mAlwaysOnListeners =
             Collections.synchronizedSet(new HashSet<>());
+    private NxpProfileDiscovery mProfileDiscovery;
     private Object mOpenTdaObj = new Object();
     private Object mCloseTdaObj = new Object();
     private Object mTdaDiscInfo = new Object();
@@ -527,9 +534,39 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
     private  INfcVendorNciCallback mNfcVendorNciCallBack = null;
     private  INfcOemExtensionCallback mNfcOemExtensionCallback = null;
 
+
     public static NfcService getInstance() {
         return sService;
     }
+
+    private INxpNfcStateChangeRequestCallback mNfcStateChangeCallback =
+        new INxpNfcStateChangeRequestCallback() {
+          @Override
+          public void enableNfc(boolean turnOn) {
+            Log.i(TAG, "enableNfc turnOn:" + turnOn);
+            if (turnOn) {
+              if (mState == NfcAdapter.STATE_ON) {
+                Log.d(TAG, "NFC is on already. Sending NFC state to EMVCo");
+                mProfileDiscovery.onNfcStateChange(mState);
+              } else {
+                if (sIsNFCBinderDied) {
+                  Log.d(
+                      TAG,
+                      "Enable NFC request received during deinitialize, so Ignoring. After Nfc abort, Nfc will be ON");
+                } else {
+                  new EnableDisableTask().execute(TASK_ENABLE);
+                }
+              }
+            } else {
+              if (mState == NfcAdapter.STATE_OFF) {
+                Log.d(TAG, "NFC is off already. Sending NFC state to EMVCo");
+                mProfileDiscovery.onNfcStateChange(mState);
+              } else {
+                new EnableDisableTask().execute(TASK_DISABLE);
+              }
+            }
+          }
+        };
 
     @Override
     public void onRemoteEndpointDiscovered(TagEndpoint tag) {
@@ -672,6 +709,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mNfcCharging.onWlcStopped(wpt_end_condition);
     }
 
+    @Override
+    public void onNfcHalBinderDied() {
+      sendMessage(NfcService.MSG_NFC_HAL_DIED, null);
+    }
+
     final class ReaderModeParams {
         public int flags;
         public IAppCallback callback;
@@ -767,6 +809,8 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         mRoutingTableParser = mNfcInjector.getRoutingTableParser();
         Log.i(TAG, "Starting NFC service");
         mNxpNfcAdapter = new NxpNfcAdapterService();
+        mProfileDiscovery = NxpProfileDiscovery.getInstance(mContext);
+        mProfileDiscovery.registerNFCStateChangeCallback(mNfcStateChangeCallback);
         mNxpNfcTdaProfile = new NxpNfcTdaProfile();
         sService = this;
 
@@ -1256,7 +1300,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     break;
                 case TASK_BOOT:
                     // Initialize the event log cache.
-                    boolean initialized;
+                    boolean initialized = false;
                     if (mPrefs.getBoolean(PREF_FIRST_BOOT, true)) {
                         Log.i(TAG, "First Boot");
                         mPrefsEditor.putBoolean(PREF_FIRST_BOOT, false);
@@ -1267,8 +1311,14 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Log.d(TAG, "checking on firmware download");
                     boolean enableNfc = shouldEnableNfc();
                     if (enableNfc) {
-                        Log.d(TAG, "NFC is on. Doing normal stuff");
-                        initialized = enableInternal();
+                      Log.d(TAG, "NFC is on. Doing normal stuff. currentProfileMode:"
+                                + mProfileDiscovery.getCurrentDiscoveryMode());
+                        if (NxpDiscoveryMode.EMVCO ==
+                            mProfileDiscovery.getCurrentDiscoveryMode()) {
+                          mProfileDiscovery.setEMVCoMode(0, false);
+                        } else {
+                          initialized = enableInternal();
+                        }
                     } else {
                         Log.d(TAG, "NFC is off.  Checking firmware version");
                         initialized = mDeviceHost.checkFirmware();
@@ -1572,6 +1622,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     intent.setFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
                     intent.putExtra(NfcAdapter.EXTRA_ADAPTER_STATE, mState);
                     mContext.sendBroadcastAsUser(intent, UserHandle.CURRENT);
+                    mProfileDiscovery.onNfcStateChange(mState);
                 }
             }
         }
@@ -1739,6 +1790,10 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
                 mContext.startActivityAsUser(allowUsingNfcIntent, UserHandle.CURRENT);
                 return true;
+            }
+            if (NxpDiscoveryMode.EMVCO ==
+                mProfileDiscovery.getCurrentDiscoveryMode()) {
+                mProfileDiscovery.setEMVCoMode(0, false);
             }
             mNfcEventLog.logEvent(
                     NfcEventProto.EventType.newBuilder()
@@ -2868,6 +2923,11 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
       public NfcTDAInfo[] discoverTDA(TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
         try {
+          if (mState != NfcAdapter.STATE_ON) {
+            Log.d(TAG, "Not in NFC mode. Failed to call the discoverTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return null;
+          }
           sendMessage(NfcService.MSG_TDA_DISCOVER, 0x00);
           synchronized (mTdaDiscInfo) { mTdaDiscInfo.wait(1000); }
         } catch (Exception e) {
@@ -2886,10 +2946,17 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
       @Override
       public byte openTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle tdaBundle = new Bundle();
-        tdaBundle.putByte("tdaID", tdaID);
-        tdaBundle.putBoolean("standBy", standBy);
+
         try {
+          if ((mState != NfcAdapter.STATE_ON) ||
+              (tdaID == CT_NFCEE_ID)) { /* CT NFCEE not supported */
+            Log.d(TAG, "Not in NFC mode. Failed to call the openTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return INVALID_CID;
+          }
+          Bundle tdaBundle = new Bundle();
+          tdaBundle.putByte("tdaID", tdaID);
+          tdaBundle.putBoolean("standBy", standBy);
           sendMessage(NfcService.MSG_OPEN_TDA, tdaBundle);
           synchronized (mOpenTdaObj) { mOpenTdaObj.wait(1000); }
         } catch (Exception e) {
@@ -2897,7 +2964,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         }
 
         byte mCID = mOpenTdaBundle.getByte("mCID");
-        if ((mCID == CT_CID) || (mCID == SAM1_CID) || (mCID == SAM2_CID)) {
+        if ((mCID == SAM1_CID) || (mCID == SAM2_CID)) {
           tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
         } else {
           tdaResult.setStatus(TdaResult.RESULT_FAILURE);
@@ -2908,33 +2975,47 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
       @Override
       public byte[] transceive(byte[] in_cmd_data, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle input_data = new Bundle();
-        byte[] rspBuff;
-        input_data.putByteArray("trans_cmd", in_cmd_data);
+
         try {
+          if (mState != NfcAdapter.STATE_ON) {
+            Log.d(TAG, "Not in NFC mode. Failed to call the transceive API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return null;
+          }
+          Bundle input_data = new Bundle();
+          byte[] rspBuff;
+          input_data.putByteArray("trans_cmd", in_cmd_data);
           sendMessage(NfcService.MSG_TRANSCEIVE_TDA, input_data);
           synchronized (mTdaTransObj) { mTdaTransObj.wait(1000); }
+
+          rspBuff = mTdaTransBundle.getByteArray("trans_rsp");
+          if (rspBuff != null) {
+            tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
+          } else {
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+          }
+          return rspBuff;
+
         } catch (Exception e) {
           e.printStackTrace();
         }
-
-        rspBuff = mTdaTransBundle.getByteArray("trans_rsp");
-
-        if (rspBuff != null) {
-          tdaResult.setStatus(TdaResult.RESULT_SUCCESS);
-        } else {
-          tdaResult.setStatus(TdaResult.RESULT_FAILURE);
-        }
-        return rspBuff;
+        return null;
       }
 
       @Override
       public void closeTDA(byte tdaID, boolean standBy, TdaResult tdaResult) {
         NfcPermissions.enforceUserPermissions(mContext);
-        Bundle tdaBundle = new Bundle();
-        tdaBundle.putByte("tdaID", tdaID);
-        tdaBundle.putBoolean("standBy", standBy);
+
         try {
+          if ((mState != NfcAdapter.STATE_ON) ||
+              (tdaID == CT_NFCEE_ID)) { /* CT NFCEE not supported */
+            Log.d(TAG, "Not in NFC mode. Failed to call the closeTDA API");
+            tdaResult.setStatus(TdaResult.RESULT_FAILURE);
+            return;
+          }
+          Bundle tdaBundle = new Bundle();
+          tdaBundle.putByte("tdaID", tdaID);
+          tdaBundle.putBoolean("standBy", standBy);
           sendMessage(NfcService.MSG_CLOSE_TDA, tdaBundle);
           synchronized (mCloseTdaObj) { mCloseTdaObj.wait(1000); }
         } catch (Exception e) {
@@ -2950,7 +3031,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
         return;
       }
     }
-
     final class SeServiceDeathRecipient implements IBinder.DeathRecipient {
         @Override
         public void binderDied() {
@@ -2960,7 +3040,6 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
             }
         }
     }
-
     final class ReaderModeDeathRecipient implements IBinder.DeathRecipient {
         @Override
         public void binderDied() {
@@ -4282,6 +4361,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                   synchronized (mCloseTdaObj) { mCloseTdaObj.notify(); }
                   break;
                 }
+                case MSG_NFC_HAL_DIED: {
+                  Log.e(TAG, "NFC HAL Died. turning off EMVCo");
+                  sIsNFCBinderDied = true;
+                  if (NxpDiscoveryMode.EMVCO ==
+                      mProfileDiscovery.getCurrentDiscoveryMode()) {
+                      mProfileDiscovery.setEMVCoMode(0, false);
+                  }
+                  break;
+                }
                 case MSG_SET_POWER_CONFIG: {
                   Bundle mPwrConfigBundle = (Bundle)msg.obj;
                   byte[] pwrConfig = mPwrConfigBundle.getByteArray("pwrConfig");
@@ -4296,6 +4384,7 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
                     Log.e(TAG, "Unknown message received");
                     break;
             }
+
         }
 
         private void sendOffHostTransactionEvent(byte[] aid, byte[] data, byte[] readerByteArray) {
