@@ -46,6 +46,7 @@
 #include "rw_api.h"
 #if (NXP_EXTNS == TRUE)
 #include "NativeT4tNfcee.h"
+#include "NfcTagExtns.h"
 #include "Nxp_Features.h"
 #include "nfa_nfcee_int.h"
 #endif
@@ -116,6 +117,7 @@ jmethodID gCachedNfcManagerNotifyCommandTimeout;
 #if (NXP_EXTNS == TRUE)
 jmethodID gCachedNfcManagerNotifyNfcHalBinderDied;
 jobjectArray gCachedNfcChipTypeValues = NULL;
+jmethodID gCachedNfcManagerNotifyTagAbortListeners;
 #endif
 const char* gNativeNfcTagClassName = "com/android/nfc/dhimpl/NativeNfcTag";
 const char* gNativeNfcManagerClassName =
@@ -293,6 +295,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
                                   tNFA_CONN_EVT_DATA* eventData) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
   LOG(DEBUG) << StringPrintf("%s: event= %u", __func__, connEvent);
+#if (NXP_EXTNS == TRUE)
+  NfcTagExtns& nfcTagExtns = NfcTagExtns::getInstance();
+#endif
 
   switch (connEvent) {
     case NFA_LISTEN_ENABLED_EVT:  // whether listening successfully started
@@ -354,6 +359,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
                                    __func__, status);
       } else {
         NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
+#if (NXP_EXTNS == TRUE)
+        nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DISC_RESULT_EVENT,
+                                            eventData);
+#endif
         handleRfDiscoveryEvent(&eventData->disc_result.discovery_ntf);
       }
       break;
@@ -382,6 +391,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
     case NFA_DEACTIVATE_FAIL_EVT:
       LOG(DEBUG) << StringPrintf("%s: NFA_DEACTIVATE_FAIL_EVT: status = %d",
                                  __func__, eventData->status);
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DEACTIVATE_FAIL_EVENT,
+                                          eventData);
+#endif
       break;
 
     case NFA_ACTIVATED_EVT:  // NFC link/protocol activated
@@ -396,6 +409,9 @@ static void nfaConnectionCallback(uint8_t connEvent,
         /* T5T doesn't support multiproto detection logic */
         NfcTag::getInstance().setNumDiscNtf(0);
       }
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.resetMfcTransceiveFlag();
+#endif
       if ((eventData->activated.activate_ntf.protocol !=
            NFA_PROTOCOL_NFC_DEP) &&
           (!isListenMode(eventData->activated))) {
@@ -406,13 +422,20 @@ static void nfaConnectionCallback(uint8_t connEvent,
       NfcTag::getInstance().setActive(true);
       if (sIsDisabling || !sIsNfaEnabled) break;
       gActivated = true;
-
+#if (NXP_EXTNS == TRUE)
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_ACTIVATED_EVENT,
+                                          eventData);
+#endif
+#if (NXP_EXTNS != TRUE)
       NfcTag::getInstance().setActivationState();
+#endif
       if (gIsSelectingRfInterface) {
         nativeNfcTag_doConnectStatus(true);
         break;
       }
-
+#if (NXP_EXTNS == TRUE)
+      NfcTag::getInstance().setActivationState();
+#endif
       nativeNfcTag_resetPresenceCheck();
       if (!isListenMode(eventData->activated) &&
           (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
@@ -443,6 +466,11 @@ static void nfaConnectionCallback(uint8_t connEvent,
           __func__, eventData->deactivated.type, gIsTagDeactivating);
       NfcTag::getInstance().setDeactivationState(eventData->deactivated);
       NfcTag::getInstance().selectNextTagIfExists();
+#if (NXP_EXTNS == TRUE)
+      // can be moved to non-std tag handling
+      nfcTagExtns.processNonStdNtfHandler(EVENT_TYPE::NFA_DEACTIVATE_EVENT,
+                                          eventData);
+#endif
       if (eventData->deactivated.type != NFA_DEACTIVATE_TYPE_SLEEP) {
         {
           SyncEventGuard g(gDeactivatedEvent);
@@ -450,8 +478,10 @@ static void nfaConnectionCallback(uint8_t connEvent,
           gDeactivatedEvent.notifyOne();
         }
         nativeNfcTag_resetPresenceCheck();
+#if (NXP_EXTNS != TRUE)
         NfcTag::getInstance().connectionEventHandler(connEvent, eventData);
         nativeNfcTag_abortWaits();
+#endif
         NfcTag::getInstance().abort();
       } else if (gIsTagDeactivating) {
         NfcTag::getInstance().setActive(false);
@@ -1523,13 +1553,16 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
 
     if (sPollingEnabled) {
       if (reader_mode && !sReaderModeEnabled) {
-        sReaderModeEnabled = true;
-        NFA_DisableListening();
+        if (nfcFL.chipType == pn7160) {
+          sReaderModeEnabled = true;
+          NFA_DisableListening();
 
-        // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF configuration.
-        nfcManager_configNfccConfigControl(false);
+          // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF
+          // configuration.
+          nfcManager_configNfccConfigControl(false);
 
-        NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+          NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+        }
       } else if (!reader_mode && sReaderModeEnabled) {
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;

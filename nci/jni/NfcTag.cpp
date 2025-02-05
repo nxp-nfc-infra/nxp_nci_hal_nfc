@@ -13,7 +13,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
+/******************************************************************************
+ *
+ *  Copyright 2022-2023 NXP
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ ******************************************************************************/
 /*
  *  Tag-reading, tag-writing operations.
  */
@@ -30,13 +46,20 @@
 #include "nfc_brcm_defs.h"
 #include "nfc_config.h"
 #include "rw_int.h"
+#if (NXP_EXTNS == TRUE)
+#include "NfcTagExtns.h"
+#endif
 
 using android::base::StringPrintf;
 
 static void deleteglobaldata(JNIEnv* e);
 static jobjectArray sTechPollBytes;
 static jobjectArray gtechActBytes;
+#if (NXP_EXTNS == TRUE)
+int sLastSelectedTagId = 0;
+#else
 static int sLastSelectedTagId = 0;
+#endif
 
 /*******************************************************************************
 **
@@ -50,6 +73,11 @@ static int sLastSelectedTagId = 0;
 NfcTag::NfcTag()
     : mNumTechList(0),
       mNumRfDiscId(0),
+#if (NXP_EXTNS == TRUE)
+      mTechListIndex(0),
+      mIsMultiProtocolTag(false),
+      mCurrentRequestedProtocol(NFC_PROTOCOL_UNKNOWN),
+#endif
       mTechnologyTimeoutsTable(MAX_NUM_TECHNOLOGY),
       mNativeData(NULL),
       mIsActivated(false),
@@ -62,10 +90,8 @@ NfcTag::NfcTag()
       mIsDynamicTagId(false),
       mPresenceCheckAlgorithm(NFA_RW_PRES_CHK_DEFAULT),
       mIsFelicaLite(false),
-      mNumDiscNtf(0),
       mNumDiscTechList(0),
-      mTechListTail(0),
-      mIsMultiProtocolTag(false) {
+      mTechListTail(0) {
   memset(mTechList, 0, sizeof(mTechList));
   memset(mTechHandles, 0, sizeof(mTechHandles));
   memset(mTechLibNfcTypes, 0, sizeof(mTechLibNfcTypes));
@@ -104,6 +130,12 @@ void NfcTag::initialize(nfc_jni_native_data* native) {
   mIsActivated = false;
   mActivationState = Idle;
   mProtocol = NFC_PROTOCOL_UNKNOWN;
+#if (NXP_EXTNS == TRUE)
+  mNumDiscNtf = 0;
+  mNumDiscTechList = 0;
+  mTechListIndex = 0;
+  NfcTagExtns::getInstance().initialize();
+#endif
   mNumRfDiscId = 0;
   mtT1tMaxMessageSize = 0;
   mReadCompletedStatus = NFA_STATUS_OK;
@@ -173,7 +205,22 @@ void NfcTag::setActivationState() {
   mActivationState = Active;
   LOG(DEBUG) << StringPrintf("%s: state=%u", fn, mActivationState);
 }
-
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        resetActivationState
+**
+** Description:     Set the state to InActive due tag lost.
+**
+** Returns:         None.
+**
+*******************************************************************************/
+void NfcTag::resetActivationState() {
+  static const char fn[] = "NfcTag::resetActivationState";
+  mActivationState = InActive;
+  LOG(INFO) << StringPrintf("%s: state=%u", fn, mActivationState);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        isActivated
@@ -331,7 +378,19 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
         }
       }
     }
-  } else if (NFC_PROTOCOL_T3T == rfDetail.protocol) {
+  }
+#if (NXP_EXTNS == TRUE)
+  else if (NFC_PROTOCOL_T3BT == rfDetail.protocol) {
+    mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
+    mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
+    mTechList[mNumTechList] =
+        TARGET_TYPE_ISO14443_3B;  // is TagTechnology.NFC_B by Java API
+    // save the stack's data structure for interpretation later
+    memcpy(&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param),
+           sizeof(rfDetail.rf_tech_param));
+  }
+#endif
+  else if (NFC_PROTOCOL_T3T == rfDetail.protocol) {
     uint8_t xx = 0;
 
     mTechList[mNumTechList] = TARGET_TYPE_FELICA;
@@ -358,8 +417,13 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
         setTransceiveTimeout(mTechList[mNumTechList], fwt);
       }
     }
-    if ((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
-        (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_LISTEN_A)) {
+#if (NXP_EXTNS == TRUE)
+    if (NfcTagExtns::getInstance().checkAndClearNonStdTagState()) {
+      LOG(INFO) << StringPrintf("%s: non std Tag", fn);
+    } else
+#endif
+        if ((rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_POLL_A) ||
+            (rfDetail.rf_tech_param.mode == NFC_DISCOVERY_TYPE_LISTEN_A)) {
       mNumTechList++;
       mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
       mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
@@ -402,6 +466,14 @@ void NfcTag::discoverTechnologies(tNFA_ACTIVATED& activationData) {
     mTechList[mNumTechList] =
         TARGET_TYPE_MIFARE_CLASSIC;  // is TagTechnology.MIFARE_CLASSIC by Java
                                      // API
+  } else if (NFC_PROTOCOL_T3BT == rfDetail.protocol) {
+    mTechHandles[mNumTechList] = rfDetail.rf_disc_id;
+    mTechLibNfcTypes[mNumTechList] = rfDetail.protocol;
+    mTechList[mNumTechList] =
+        TARGET_TYPE_ISO14443_3B;  // is TagTechnology.NFC_B by Java API
+    // save the stack's data structure for interpretation later
+    memcpy(&(mTechParams[mNumTechList]), &(rfDetail.rf_tech_param),
+           sizeof(rfDetail.rf_tech_param));
   } else {
     LOG(ERROR) << StringPrintf("%s: unknown protocol ????", fn);
     mTechList[mNumTechList] = TARGET_TYPE_UNKNOWN;
@@ -460,7 +532,33 @@ void NfcTag::discoverTechnologies(tNFA_DISC_RESULT& discoveryData) {
 TheEnd:
   LOG(DEBUG) << StringPrintf("%s: exit", fn);
 }
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        notifyNfcAbortTagops()
+**
+** Description:     Notify service to abort TAG ops.
+**
+** Returns:         None
+**
+*******************************************************************************/
+void NfcTag::notifyNfcAbortTagops(union sigval) {
+  LOG(INFO) << StringPrintf("%s: enter", __func__);
+  NfcTag& nTag = NfcTag::getInstance();
+  JNIEnv* e = NULL;
+  ScopedAttach attach(nTag.mNativeData->vm, &e);
+  if (e == NULL) {
+    LOG(ERROR) << StringPrintf("%s: jni env is null", __func__);
+    return;
+  }
 
+  e->CallVoidMethod(nTag.mNativeData->manager,
+                    android::gCachedNfcManagerNotifyTagAbortListeners);
+
+  CHECK(!e->ExceptionCheck());
+  LOG(INFO) << StringPrintf("%s: exit", __func__);
+}
+#endif
 /*******************************************************************************
 **
 ** Function:        createNativeNfcTag
@@ -560,6 +658,11 @@ static void deleteglobaldata(JNIEnv* e) {
   if (gtechActBytes != NULL) {
     e->DeleteGlobalRef(gtechActBytes);
   }
+#if (NXP_EXTNS == TRUE)
+  if (gtechActBytes != NULL) {
+    e->DeleteGlobalRef(gtechActBytes);
+  }
+#endif
   LOG(DEBUG) << StringPrintf("%s: exit", fn);
 }
 
@@ -595,6 +698,12 @@ void NfcTag::fillNativeNfcTagMembers1(JNIEnv* e, jclass tag_cls, jobject tag) {
       technologies[i] = mTechList[i];
       handles[i] = mTechHandles[i];
       types[i] = mTechLibNfcTypes[i];
+
+      if (mTechParams[0].param.pa.sel_rsp == NON_STD_T2T_CARD_SAK) {
+        if (TARGET_TYPE_ISO14443_3A == technologies[i]) {
+          technologies[i] = ISO_DEP_TECH;
+        }
+      }
     }
   }
 
@@ -857,7 +966,14 @@ void NfcTag::fillNativeNfcTagMembers4(JNIEnv* e, jclass tag_cls, jobject tag,
       actBytes.reset(e->NewByteArray(1));
       e->SetByteArrayRegion(actBytes.get(), 0, 1,
                             (jbyte*)&mTechParams[i].param.pa.sel_rsp);
-    } else if (NFC_PROTOCOL_ISO_DEP == mTechLibNfcTypes[i]) {
+    }
+#if (NXP_EXTNS == TRUE)
+    else if (NFC_PROTOCOL_T3BT == mTechLibNfcTypes[i]) {
+      LOG(INFO) << StringPrintf("%s: tech T3BT; chinaId card", fn);
+      actBytes.reset(e->NewByteArray(0));
+    }
+#endif
+    else if (NFC_PROTOCOL_ISO_DEP == mTechLibNfcTypes[i]) {
       // t4t
       if (mTechList[i] ==
           TARGET_TYPE_ISO14443_4)  // is TagTechnology.ISO_DEP by Java API
@@ -991,10 +1107,23 @@ void NfcTag::fillNativeNfcTagMembers5(JNIEnv* e, jclass tag_cls, jobject tag,
              NFC_DISCOVERY_TYPE_POLL_B_PRIME == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_B == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_B_PRIME == mTechParams[0].mode) {
-    LOG(DEBUG) << StringPrintf("%s: tech B", fn);
-    uid.reset(e->NewByteArray(NFC_NFCID0_MAX_LEN));
-    e->SetByteArrayRegion(uid.get(), 0, NFC_NFCID0_MAX_LEN,
-                          (jbyte*)&mTechParams[0].param.pb.nfcid0);
+#if (NXP_EXTNS == TRUE)
+    if (activationData.activate_ntf.protocol != NFA_PROTOCOL_T3BT) {
+#endif
+      LOG(DEBUG) << StringPrintf("%s: tech B", fn);
+      uid.reset(e->NewByteArray(NFC_NFCID0_MAX_LEN));
+      e->SetByteArrayRegion(uid.get(), 0, NFC_NFCID0_MAX_LEN,
+                            (jbyte*)&mTechParams[0].param.pb.nfcid0);
+#if (NXP_EXTNS == TRUE)
+    } else {
+      LOG(INFO) << StringPrintf("%s: chinaId card", fn);
+      LOG(INFO) << StringPrintf("%s: pipi_id[0]=%x", fn,
+                                mTechParams[0].param.pb.pupiid[0]);
+      uid.reset(e->NewByteArray(NFC_PUPIID_MAX_LEN));
+      e->SetByteArrayRegion(uid.get(), 0, NFC_PUPIID_MAX_LEN,
+                            (jbyte*)&mTechParams[0].param.pb.pupiid);
+    }
+#endif
   } else if (NFC_DISCOVERY_TYPE_POLL_F == mTechParams[0].mode ||
              NFC_DISCOVERY_TYPE_LISTEN_F == mTechParams[0].mode) {
     uid.reset(e->NewByteArray(NFC_NFCID2_LEN));
@@ -1038,6 +1167,9 @@ void NfcTag::resetTechnologies() {
   mNumDiscTechList = 0;
   mTechListTail = 0;
   mIsMultiProtocolTag = false;
+#if (NXP_EXTNS == TRUE)
+  mTechListIndex = 0;
+#endif
   memset(mTechList, 0, sizeof(mTechList));
   memset(mTechHandles, 0, sizeof(mTechHandles));
   memset(mTechLibNfcTypes, 0, sizeof(mTechLibNfcTypes));
@@ -1045,6 +1177,15 @@ void NfcTag::resetTechnologies() {
   mIsDynamicTagId = false;
   mIsFelicaLite = false;
   resetAllTransceiveTimeouts();
+#if (NXP_EXTNS == TRUE)
+  // To DO artf1170009
+  //  EXTNS_SetConnectFlag(false);
+  /* reset KOVIO uidLen on disconnect/presence
+   * check failed/DEACTIVATED_NTF to enable
+   * thus isSameKovio returns false
+   * */
+  mLastKovioUidLen = 0;
+#endif
 }
 
 /*******************************************************************************
@@ -1067,6 +1208,11 @@ void NfcTag::selectFirstTag() {
                                fn, i, mTechHandlesDiscData[i],
                                mTechLibNfcTypesDiscData[i]);
     if (mTechLibNfcTypesDiscData[i] != NFA_PROTOCOL_NFC_DEP) {
+#if (NXP_EXTNS == TRUE)
+      if (NfcTagExtns::getInstance().shouldSkipProtoActivate(
+              mTechLibNfcTypesDiscData[i]))
+        break;  // Non-standard tag detected
+#endif
       sLastSelectedTagId = i;
       foundIdx = i;
       break;
