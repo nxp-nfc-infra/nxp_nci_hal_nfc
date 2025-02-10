@@ -3886,9 +3886,15 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback 
 
     public void registerT3tIdentifier(String systemCode, String nfcId2, String t3tPmm) {
         Log.d(TAG, "request to register LF_T3T_IDENTIFIER");
+        NfcChipType chipType = mDeviceHost.getChipType();
 
-        byte[] t3tIdentifier = getT3tIdentifierBytes(systemCode, nfcId2, t3tPmm);
-        sendMessage(MSG_REGISTER_T3T_IDENTIFIER, t3tIdentifier);
+        if (chipType == NfcChipType.PN7160) {
+            byte[] t3tIdentifier = getT3tIdentifierBytes(systemCode, nfcId2, t3tPmm);
+            sendMessage(MSG_REGISTER_T3T_IDENTIFIER, t3tIdentifier);
+        }
+        else {
+            Log.d(TAG, "Not supported for PN7220");
+        }
     }
 
     public void deregisterT3tIdentifier(String systemCode, String nfcId2, String t3tPmm) {
