@@ -1571,16 +1571,14 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
 
     if (sPollingEnabled) {
       if (reader_mode && !sReaderModeEnabled) {
+        sReaderModeEnabled = true;
+        NFA_DisableListening();
         if (nfcFL.chipType == pn7160) {
-          sReaderModeEnabled = true;
-          NFA_DisableListening();
-
           // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF
           // configuration.
           nfcManager_configNfccConfigControl(false);
-
-          NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
         }
+        NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
       } else if (!reader_mode && sReaderModeEnabled) {
         struct nfc_jni_native_data* nat = getNative(e, o);
         sReaderModeEnabled = false;
@@ -1902,10 +1900,9 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
-  if ((nfcFL.chipType == pn7160) &&
-      (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
-       prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
-       prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
+  if (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+      prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
+      prevScreenState == NFA_SCREEN_STATE_ON_LOCKED) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -1965,8 +1962,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
-  if ((nfcFL.chipType == pn7160) &&
-      (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED)) {
+  if (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -1991,14 +1987,22 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     // screen turns off, disconnect tag if connected
     nativeNfcTag_doDisconnect(NULL, NULL);
     if (nfcFL.chipType == pn7220) {
-      NFA_StopRfDiscovery();
+      startRfDiscovery(false);
+      sDiscoveryEnabled = false;
+      stopPolling_rfDiscoveryDisabled();
+      startRfDiscovery(true);
+      sDiscoveryEnabled = true;
     }
   }
 
   if ((nfcFL.chipType == pn7220) && (state == NFA_SCREEN_STATE_ON_UNLOCKED) &&
       (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
        prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
-    NFA_StartRfDiscovery();
+    startRfDiscovery(false);
+    sDiscoveryEnabled = false;
+    startPolling_rfDiscoveryDisabled(0);
+    startRfDiscovery(true);
+    sDiscoveryEnabled = true;
   }
 
   prevScreenState = state;
