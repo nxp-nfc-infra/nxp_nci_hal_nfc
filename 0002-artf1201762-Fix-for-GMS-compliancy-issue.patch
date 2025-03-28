@@ -1,0 +1,129 @@
+From 2a952c57a152ab804ad7ab797adb928e42e8fbc2 Mon Sep 17 00:00:00 2001
+From: nxf36763 <ashish.manohar@nxp.com>
+Date: Mon, 17 Mar 2025 17:23:57 +0530
+Subject: [PATCH 2/2] [artf1201762]: Fix for GMS compliancy issue
+
+- Fix for CTS issue
+- support of HCE in screen off state for PN7220
+- As per screen off & lock state,
+	a. Power_sub_screen_state_cmd
+	b. RF_DEACTIVATE_CMD into IDLE
+	c. RF_DISCOVER_CMD with only CE enabled
+- As per screen on & unlock state
+	a. Power_sub_screen_state_cmd
+	b. RF_DEACTIVATE_CMD into IDLE
+	c. RF_DISCOVER_CMD with only Card and Reader enabled.
+
+Change-Id: I8102e18c8be976f3f2ff5227bff40c421a114a0e
+---
+ nci/jni/NativeNfcManager.cpp        | 30 ++++++++++++++++-------------
+ src/com/android/nfc/NfcService.java | 19 ++----------------
+ 2 files changed, 19 insertions(+), 30 deletions(-)
+
+diff --git a/nci/jni/NativeNfcManager.cpp b/nci/jni/NativeNfcManager.cpp
+index 26242a60e..1de2d8384 100644
+--- a/nci/jni/NativeNfcManager.cpp
++++ b/nci/jni/NativeNfcManager.cpp
+@@ -1571,16 +1571,14 @@ static void nfcManager_enableDiscovery(JNIEnv* e, jobject o,
+ 
+     if (sPollingEnabled) {
+       if (reader_mode && !sReaderModeEnabled) {
++        sReaderModeEnabled = true;
++        NFA_DisableListening();
+         if (nfcFL.chipType == pn7160) {
+-          sReaderModeEnabled = true;
+-          NFA_DisableListening();
+-
+           // configure NFCC_CONFIG_CONTROL- NFCC not allowed to manage RF
+           // configuration.
+           nfcManager_configNfccConfigControl(false);
+-
+-          NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+         }
++        NFA_SetRfDiscoveryDuration(READER_MODE_DISCOVERY_DURATION);
+       } else if (!reader_mode && sReaderModeEnabled) {
+         struct nfc_jni_native_data* nat = getNative(e, o);
+         sReaderModeEnabled = false;
+@@ -1902,10 +1900,9 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
+     return;
+   }
+ 
+-  if ((nfcFL.chipType == pn7160) &&
+-      (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+-       prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
+-       prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
++  if (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
++      prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
++      prevScreenState == NFA_SCREEN_STATE_ON_LOCKED) {
+     SyncEventGuard guard(sNfaSetPowerSubState);
+     status = NFA_SetPowerSubStateForScreenState(state);
+     if (status != NFA_STATUS_OK) {
+@@ -1965,8 +1962,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
+     return;
+   }
+ 
+-  if ((nfcFL.chipType == pn7160) &&
+-      (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED)) {
++  if (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED) {
+     SyncEventGuard guard(sNfaSetPowerSubState);
+     status = NFA_SetPowerSubStateForScreenState(state);
+     if (status != NFA_STATUS_OK) {
+@@ -1991,14 +1987,22 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
+     // screen turns off, disconnect tag if connected
+     nativeNfcTag_doDisconnect(NULL, NULL);
+     if (nfcFL.chipType == pn7220) {
+-      NFA_StopRfDiscovery();
++      startRfDiscovery(false);
++      sDiscoveryEnabled = false;
++      stopPolling_rfDiscoveryDisabled();
++      startRfDiscovery(true);
++      sDiscoveryEnabled = true;
+     }
+   }
+ 
+   if ((nfcFL.chipType == pn7220) && (state == NFA_SCREEN_STATE_ON_UNLOCKED) &&
+       (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
+        prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
+-    NFA_StartRfDiscovery();
++    startRfDiscovery(false);
++    sDiscoveryEnabled = false;
++    startPolling_rfDiscoveryDisabled(0);
++    startRfDiscovery(true);
++    sDiscoveryEnabled = true;
+   }
+ 
+   prevScreenState = state;
+diff --git a/src/com/android/nfc/NfcService.java b/src/com/android/nfc/NfcService.java
+index 056ab06d6..8d7b99f83 100644
+--- a/src/com/android/nfc/NfcService.java
++++ b/src/com/android/nfc/NfcService.java
+@@ -3725,24 +3725,9 @@ public class NfcService implements DeviceHostListener, ForegroundUtils.Callback
+             paramsBuilder.setEnableLowPowerDiscovery(false);
+         }
+ 
+-        if (mIsHceCapable &&
+-            mScreenState >= ScreenStateHelper.SCREEN_STATE_ON_LOCKED &&
+-            mReaderModeParams == null) {
+-          NfcChipType chipType = mDeviceHost.getChipType();
+-          if (chipType == NfcChipType.PN7220 ||
+-              chipType == NfcChipType.PN7221) {
+-            if (mScreenState == ScreenStateHelper.SCREEN_STATE_ON_UNLOCKED) {
+-              // Host routing is enabled only when the screen is un-locked.
+-              paramsBuilder.setEnableHostRouting(true);
+-            } else {
+-              // Host routing is not enabled when the screen is locked.
+-              paramsBuilder.setEnableHostRouting(false);
+-            }
+-          } else {
+-            // Host routing is always enabled at lock screen or later, provided
+-            // we aren't in reader mode
++        if (mIsHceCapable && mReaderModeParams == null) {
++            // Host routing is always enabled, provided we aren't in reader mode
+             paramsBuilder.setEnableHostRouting(true);
+-          }
+         }
+ 
+         return paramsBuilder.build();
+-- 
+2.49.0
+

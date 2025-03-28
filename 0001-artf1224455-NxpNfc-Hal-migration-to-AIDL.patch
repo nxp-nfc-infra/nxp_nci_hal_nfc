@@ -1,0 +1,28 @@
+From a19b58f5b5966f317251ec4a07d5dfcf02e1060d Mon Sep 17 00:00:00 2001
+From: nxf36763 <ashish.manohar@nxp.com>
+Date: Thu, 13 Mar 2025 15:22:56 +0530
+Subject: [PATCH 1/2] [artf1224455]: NxpNfc Hal migration to AIDL.
+
+- vendor.nxp.nxpnfc_aidl-V2-ndk is added to bp file. it required to support
+INxpNfc.Aidl api
+
+Change-Id: I996f07a15f3771b3e9df51b7930327b1054aa874
+---
+ nci/jni/Android.bp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/nci/jni/Android.bp b/nci/jni/Android.bp
+index 8c43a4c5e..312072a1a 100644
+--- a/nci/jni/Android.bp
++++ b/nci/jni/Android.bp
+@@ -47,6 +47,7 @@ cc_library_shared {
+         "android.hardware.nfc@1.1",
+         "android.hardware.nfc@1.2",
+         "vendor.nxp.nxpnfc@2.0",
++        "vendor.nxp.nxpnfc_aidl-V2-ndk",
+         // Add for AIDL
+         "android.hardware.nfc-V1-ndk",
+         "libnfcutils",
+-- 
+2.49.0
+
