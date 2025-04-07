@@ -17,7 +17,7 @@
  *
  *  The original Work has been changed by NXP
  *
- *  Copyright 2022-2024 NXP
+ *  Copyright 2022-2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -2027,10 +2027,9 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
- if ((nfcFL.chipType == pn7160) &&
-    (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
+ if (prevScreenState == NFA_SCREEN_STATE_OFF_LOCKED ||
       prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
-      prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
+      prevScreenState == NFA_SCREEN_STATE_ON_LOCKED) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -2088,8 +2087,7 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     return;
   }
 
-  if ((nfcFL.chipType == pn7160) &&
-     (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED)) {
+  if (prevScreenState == NFA_SCREEN_STATE_ON_UNLOCKED) {
     SyncEventGuard guard(sNfaSetPowerSubState);
     status = NFA_SetPowerSubStateForScreenState(state);
     if (status != NFA_STATUS_OK) {
@@ -2114,14 +2112,24 @@ static void nfcManager_doSetScreenState(JNIEnv* e, jobject o,
     // screen turns off, disconnect tag if connected
     nativeNfcTag_doDisconnect(NULL, NULL);
     if (nfcFL.chipType == pn7220) {
-      NFA_StopRfDiscovery();
+
+      startRfDiscovery(false);
+      sDiscoveryEnabled = false;
+      stopPolling_rfDiscoveryDisabled();
+      startRfDiscovery(true);
+      sDiscoveryEnabled = true;
     }
   }
 
   if ((nfcFL.chipType == pn7220) && (state == NFA_SCREEN_STATE_ON_UNLOCKED) &&
       (prevScreenState == NFA_SCREEN_STATE_OFF_UNLOCKED ||
        prevScreenState == NFA_SCREEN_STATE_ON_LOCKED)) {
-    NFA_StartRfDiscovery();
+
+      startRfDiscovery(false);
+      sDiscoveryEnabled = false;
+      startPolling_rfDiscoveryDisabled(0);
+      startRfDiscovery(true);
+      sDiscoveryEnabled = true;
   }
 
   prevScreenState = state;
