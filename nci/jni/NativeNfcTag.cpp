@@ -15,7 +15,7 @@
  */
 /******************************************************************************
 + *
-+ *  Copyright 2022-2023 NXP
++ *  Copyright 2022-2023, 2025 NXP
 + *
 + *  Licensed under the Apache License, Version 2.0 (the "License");
 + *  you may not use this file except in compliance with the License.
@@ -771,6 +771,9 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
             TAG_OPERATION::TAG_RECONNECT_OPERATION);
         if (tagStat == NfcTagExtns::TAG_STATUS_FAILED) break;
         if (tagStat == NfcTagExtns::TAG_STATUS_STANDARD) {
+          natTag.setLastSelectedTag(
+            natTag.mTechHandles[sCurrentConnectedHandle],
+            natTag.mTechLibNfcTypes[sCurrentConnectedHandle]);
 #endif
           if (NFA_STATUS_OK !=
               (status =
@@ -817,11 +820,13 @@ static jint nativeNfcTag_doConnect(JNIEnv*, jobject, jint targetHandle) {
         LOG(ERROR) << StringPrintf("%s: waiting for Card to be activated",
                                    __func__);
         int retry = 0;
-        sConnectWaitingForComplete = JNI_TRUE;
 #if (NXP_EXTNS == TRUE)
         if (!nfcTagExtns.isNonStdMFCTagDetected()) {
 #endif
           do {
+          // Nci retries on failures by restarting discovery, extend recovery
+          // duration till time out
+          sConnectWaitingForComplete = JNI_TRUE;
             SyncEventGuard reselectEvent(sReconnectEvent);
             if (sReconnectEvent.wait(500) == false) {  // if timeout occurred
               LOG(ERROR) << StringPrintf("%s: timeout ", __func__);
