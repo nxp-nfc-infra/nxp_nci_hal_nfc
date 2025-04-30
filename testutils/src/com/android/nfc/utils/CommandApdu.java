@@ -60,3 +60,4 @@ public class CommandApdu implements Parcelable {
         dest.writeInt(mReachable ? 1 : 0);
     }
 }
+
