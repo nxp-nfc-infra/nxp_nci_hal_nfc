@@ -398,6 +398,11 @@ static void nfaConnectionCallback(uint8_t connEvent,
         LOG(ERROR) << StringPrintf(
             "%s: NFA_SELECT_RESULT_EVT error: status = %d", __func__,
             eventData->status);
+#if (NXP_EXTNS == TRUE)
+        if (NfcTag::getInstance().retrySelect() == NFA_STATUS_OK) {
+          break;
+        }
+#endif
         NFA_Deactivate(FALSE);
       }
       break;
@@ -425,6 +430,7 @@ static void nfaConnectionCallback(uint8_t connEvent,
         NfcTag::getInstance().setNumDiscNtf(0);
       }
 #if (NXP_EXTNS == TRUE)
+      NfcTag::getInstance().mSelectRetryCount = 0;
       nfcTagExtns.resetMfcTransceiveFlag();
 #endif
       if ((eventData->activated.activate_ntf.protocol !=

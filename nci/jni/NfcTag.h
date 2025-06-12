@@ -18,24 +18,24 @@
  *  Tag-reading, tag-writing operations.
  */
 /******************************************************************************
-*
-*  The original Work has been changed by NXP.
-*
-*  Licensed under the Apache License, Version 2.0 (the "License");
-*  you may not use this file except in compliance with the License.
-*  You may obtain a copy of the License at
-*
-*  http://www.apache.org/licenses/LICENSE-2.0
-*
-*  Unless required by applicable law or agreed to in writing, software
-*  distributed under the License is distributed on an "AS IS" BASIS,
-*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-*  See the License for the specific language governing permissions and
-*  limitations under the License.
-*
-*  Copyright 2023-2024 NXP
-*
-******************************************************************************/
+ *
+ *  The original Work has been changed by NXP.
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
+ *  Copyright 2023-2025 NXP
+ *
+ ******************************************************************************/
 #pragma once
 #include <vector>
 
@@ -91,6 +91,7 @@ class NfcTag {
   bool mIsMultiProtocolTag;
   int  mCurrentRequestedProtocol;
   uint8_t mNfcID0[4];
+  int mSelectRetryCount;
 #endif
 
   /*******************************************************************************
@@ -273,6 +274,31 @@ void clearNonStdMfcState();
   **
   *******************************************************************************/
   void selectFirstTag();
+
+#if (NXP_EXTNS == TRUE)
+  /*******************************************************************************
+  **
+  ** Function:        setLastSelectedTag
+  **
+  ** Description:     Set the last selected tag in case of multiprotocol tag
+  **
+  ** Returns:         NFA_STATUS_FAILED if tag is not found.
+  **
+  *******************************************************************************/
+  tNFA_STATUS setLastSelectedTag(int targetHandle, int nfcType);
+
+  /*******************************************************************************
+  **
+  ** Function:        retrySelect
+  **
+  ** Description:     Retry select last tag in case of multiprotocol tag
+  **
+  ** Returns:         NFA_STATUS_FAILED if it is not a multiprotocol tag or
+  **                  retry is already done. Otherwise it returns Select status.
+  **
+  *******************************************************************************/
+  tNFA_STATUS retrySelect();
+#endif
 
   /*******************************************************************************
   **
@@ -590,6 +616,20 @@ void clearNonStdMfcState();
   **
   *******************************************************************************/
   void createNativeNfcTag(tNFA_ACTIVATED& activationData);
+
+#if (NXP_EXTNS == TRUE)
+  /*******************************************************************************
+  **
+  ** Function:        selectTagAtIndex
+  **
+  ** Description:     When multiple tags are discovered, selects a tag at
+  **                  specified index
+  **
+  ** Returns:         Select result
+  **
+  *******************************************************************************/
+  tNFA_STATUS selectTagAtIndex(int index);
+#endif
 
   /*******************************************************************************
   **

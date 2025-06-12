@@ -15,7 +15,7 @@
  */
 /******************************************************************************
  *
- *  Copyright 2022-2024 NXP
+ *  Copyright 2022-2025 NXP
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
  *  you may not use this file except in compliance with the License.
@@ -1255,6 +1255,7 @@ void NfcTag::resetTechnologies() {
   mTechListTail = 0;
   mIsMultiProtocolTag = false;
 #if (NXP_EXTNS == TRUE)
+  mSelectRetryCount = 0;
   mTechListIndex = 0;
 #endif
   memset(mTechList, 0, sizeof(mTechList));
@@ -1288,8 +1289,9 @@ void NfcTag::resetTechnologies() {
 void NfcTag::selectFirstTag() {
   static const char fn[] = "NfcTag::selectFirstTag";
   int foundIdx = -1;
+#if (NXP_EXTNS != TRUE)
   tNFA_INTF_TYPE rf_intf = NFA_INTERFACE_FRAME;
-
+#endif
   for (int i = 0; i < mNumDiscTechList; i++) {
     DLOG_IF(INFO, nfc_debug_enabled)
         << StringPrintf("%s: nfa target idx=%d h=0x%X; protocol=0x%X", fn, i,
@@ -1307,6 +1309,9 @@ void NfcTag::selectFirstTag() {
   }
 
   if (foundIdx != -1) {
+#if (NXP_EXTNS == TRUE)
+    tNFA_STATUS stat = selectTagAtIndex(foundIdx);
+#else
     if (mTechLibNfcTypesDiscData[foundIdx] == NFA_PROTOCOL_ISO_DEP) {
       rf_intf = NFA_INTERFACE_ISO_DEP;
     } else if (mTechLibNfcTypesDiscData[foundIdx] == NFC_PROTOCOL_MIFARE) {
@@ -1316,6 +1321,7 @@ void NfcTag::selectFirstTag() {
 
     tNFA_STATUS stat = NFA_Select(mTechHandlesDiscData[foundIdx],
                                   mTechLibNfcTypesDiscData[foundIdx], rf_intf);
+#endif
     if (stat != NFA_STATUS_OK)
       LOG(ERROR) << StringPrintf("%s: fail select; error=0x%X", fn, stat);
   } else
@@ -1335,7 +1341,9 @@ void NfcTag::selectFirstTag() {
 void NfcTag::selectNextTagIfExists() {
   static const char fn[] = "NfcTag::selectNextTagIfExists";
   int foundIdx = -1;
+#if (NXP_EXTNS != TRUE)
   tNFA_INTF_TYPE rf_intf = NFA_INTERFACE_FRAME;
+#endif
   tNFA_STATUS stat = NFA_STATUS_FAILED;
 
   if (mNumDiscNtf == 0) {
@@ -1360,6 +1368,9 @@ void NfcTag::selectNextTagIfExists() {
   }
 
   if (foundIdx != -1) {
+#if (NXP_EXTNS == TRUE)
+    stat = selectTagAtIndex(foundIdx);
+#else
     if (mTechLibNfcTypesDiscData[foundIdx] == NFA_PROTOCOL_ISO_DEP) {
       rf_intf = NFA_INTERFACE_ISO_DEP;
     } else if (mTechLibNfcTypesDiscData[foundIdx] == NFC_PROTOCOL_MIFARE) {
@@ -1370,6 +1381,7 @@ void NfcTag::selectNextTagIfExists() {
 
     stat = NFA_Select(mTechHandlesDiscData[foundIdx],
                       mTechLibNfcTypesDiscData[foundIdx], rf_intf);
+#endif
     if (stat == NFA_STATUS_OK) {
       DLOG_IF(ERROR, nfc_debug_enabled)
           << StringPrintf("%s: Select Success, wait for activated ntf", fn);
@@ -1382,6 +1394,98 @@ void NfcTag::selectNextTagIfExists() {
         << StringPrintf("%s: only found NFC-DEP technology.", fn);
   }
 }
+
+#if (NXP_EXTNS == TRUE)
+/*******************************************************************************
+**
+** Function:        selectTagAtIndex
+**
+** Description:     When multiple tags are discovered, selects a tag at
+**                  specified index
+**
+** Returns:         Select result
+**
+*******************************************************************************/
+tNFA_STATUS NfcTag::selectTagAtIndex(int index) {
+  static const char fn[] = "NfcTag::selectTagAtIndex";
+
+  tNFA_INTF_TYPE rf_intf = NFA_INTERFACE_FRAME;
+  if (index < 0 || index >= mNumDiscTechList) {
+    LOG(ERROR) << StringPrintf("%s: Invalid index passed", fn);
+    return NFA_STATUS_FAILED;
+  }
+  if (mTechLibNfcTypesDiscData[index] == NFA_PROTOCOL_ISO_DEP) {
+    rf_intf = NFA_INTERFACE_ISO_DEP;
+  } else if (mTechLibNfcTypesDiscData[index] == NFC_PROTOCOL_MIFARE) {
+    rf_intf = NFA_INTERFACE_MIFARE;
+  } else
+    rf_intf = NFA_INTERFACE_FRAME;
+
+  return NFA_Select(mTechHandlesDiscData[index],
+                    mTechLibNfcTypesDiscData[index], rf_intf);
+}
+
+/*******************************************************************************
+**
+** Function:        setLastSelectedTag
+**
+** Description:     Set the last selected tag in case of multiprotocol tag
+**
+** Returns:         NFA_STATUS_FAILED if tag is not found.
+**
+*******************************************************************************/
+tNFA_STATUS NfcTag::setLastSelectedTag(int targetHandle, int nfcType) {
+  static const char fn[] = "NfcTag::setLastSelectedTag";
+
+  if (!mIsMultiProtocolTag) {
+    LOG(INFO) << StringPrintf("%s: Not a multiprotocol tag, returning", fn);
+    return NFA_STATUS_OK;
+  }
+  for (int i = 0; i < mNumDiscTechList; i++) {
+    if (mTechHandlesDiscData[i] == targetHandle &&
+        mTechLibNfcTypesDiscData[i] == nfcType) {
+      sLastSelectedTagId = i;
+      return NFA_STATUS_OK;
+    }
+  }
+  LOG(ERROR) << StringPrintf(
+      "%s: Couldn't find target Handle (%d) with NFC Type (%d)", fn,
+      targetHandle, nfcType);
+  return NFA_STATUS_FAILED;
+}
+
+/*******************************************************************************
+**
+** Function:        retrySelect
+**
+** Description:     Retry select last tag in case of multiprotocol tag
+**
+** Returns:         NFA_STATUS_FAILED if it is not a multiprotocol tag or
+**                  retry is already done. Otherwise it returns Select status.
+**
+*******************************************************************************/
+tNFA_STATUS NfcTag::retrySelect() {
+  static const char fn[] = "NfcTag::retrySelect";
+  tNFA_STATUS stat = NFA_STATUS_FAILED;
+
+  if (mSelectRetryCount != 0) {
+    LOG(ERROR) << StringPrintf("%s: Select retry already done, returning", fn);
+    return NFA_STATUS_FAILED;
+  }
+  if (!mIsMultiProtocolTag) {
+    LOG(INFO) << StringPrintf("%s: Not a multiprotocol tag, returning", fn);
+    return NFA_STATUS_FAILED;
+  }
+  stat = selectTagAtIndex(sLastSelectedTagId);
+  if (stat == NFA_STATUS_OK) {
+    LOG(INFO) << StringPrintf("%s: Select Success, wait for activated ntf", fn);
+  } else {
+    LOG(ERROR) << StringPrintf("%s: fail select; error=0x%X", fn, stat);
+  }
+  mSelectRetryCount++;
+  return stat;
+}
+#endif
 
 /*******************************************************************************
 **
