@@ -2614,9 +2614,19 @@ bool nfcManager_isNfcActive() { return sIsNfaEnabled; }
 void startStopPolling(bool isStartPolling) {
   tNFA_STATUS status = NFA_STATUS_FAILED;
   uint8_t discovry_param = 0;
+#if (NXP_EXTNS == TRUE)
+  LOG(DEBUG) << StringPrintf("%s: enter; isStart=%u chiptype = 0x%x", __func__,
+                             isStartPolling, nfcFL.chipType);
+#else
   LOG(DEBUG) << StringPrintf("%s: enter; isStart=%u", __func__, isStartPolling);
 
+#endif
   if (NFC_GetNCIVersion() >= NCI_VERSION_2_0) {
+#if (NXP_EXTNS == TRUE)
+    if (nfcFL.chipType != pn7160) {
+      return;
+    }
+#endif
     SyncEventGuard guard(gNfaSetConfigEvent);
     if (isStartPolling) {
       discovry_param =
